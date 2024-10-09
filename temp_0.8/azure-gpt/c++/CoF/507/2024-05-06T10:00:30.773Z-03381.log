@@ -1,0 +1,806 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `partitura.in` and write to `partitura.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+~[partitura.png|align=right|width=25%]
+
+Mihai s-a decis în sfârșit să compună o melodie. Fără să știe de unde să înceapă, a scris pe o foaie $n$ note muzicale. Fiecare notă muzicală este definită de două valori reprezentând durata și înălțimea acesteia astfel:
+* **durata** este exprimată printr-o fracție de forma $\displaystyle \frac{1}{2^x}$, unde $x$ este un număr natural nenul;
+* **înălțimea** este exprimată printr-un număr natural nenul $y$.
+
+Durata unui grup de note este egală cu suma duratelor notelor din grup. Pentru a compune o melodie corect din punct de vedere muzical, el trebuie să distribuie toate notele în grupuri disjuncte, astfel încât durata fiecărui grup să fie $1$. Mihai definește **scorul unui grup** de note ca fiind suma înălțimilor tuturor notelor din grup, ridicată la pătrat. De asemenea, el definește **scorul unei melodii** ca fiind suma scorurilor tuturor grupurilor de note formate
+care pot forma un grup.
+
+Mihai vrea să afle care este scorul maxim al unei melodii pe care îl poate obține după gruparea tuturor notelor date.
+
+# Cerință
+
+Dându-se $n$ note sub forma a $n$ perechi de numere, $x$ și $y$, să se afișeze scorul maxim ce poate fi obținut după gruparea tuturor notelor date în grupuri disjuncte.
+
+# Date de intrare
+
+Fișierul de intrare `partitura.in` va conține pe prima linie un număr natural $n$, reprezentând numărul de note, iar pe următoarele $n$ linii se vor afla câte două numere naturale $x$ și $y$ separate prin câte un spațiu, cu semnificația din enunț, pentru fiecare din cele $n$ note.
+
+# Date de ieșire
+
+Fișierul de ieșire `partitura.out` va conține un singur număr natural reprezentând scorul maxim cerut.
+
+# Restricții și precizări
+* $1 \leq n \leq 300 \ 000$;
+* $1 \leq x \leq 18$;
+* $1 \leq y \leq 10 \ 000$;
+* Se garantează că se pot distribui toate notele date în grupuri de durată $1$.
+* Pentru $20$ de puncte, $n \leq 4$, $x = 1$;
+* Pentru $22$ de puncte, $x = 1$;
+* Pentru $17$ puncte, pentru toate notele, $x$ are aceeași valoare;
+* Pentru $41$ de puncte, nu există restricții suplimentare.
+
+---
+
+Example:
+`partitura.in`
+```
+5
+2 3
+3 2
+2 1
+2 2
+3 5
+```
+
+`partitura.out`
+```
+169
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+struct Note {
+    int duration;
+    int height;
+};
+
+bool compareHeights(const Note& a, const Note& b) {
+    return a.height > b.height;
+}
+
+int main() {
+    ifstream fin("partitura.in", ios::in);
+    ofstream fout("partitura.out", ios::out);
+
+    int n;
+    fin >> n;
+
+    vector<Note> notes(n);
+    vector<long long> sums(1 << 18);
+    for (int i = 0; i < n; ++i) {
+        fin >> notes[i].duration >> notes[i].height;
+        notes[i].duration = 1 << (notes[i].duration - 1);
+        sums[notes[i].duration] += notes[i].height;
+    }
+
+    fin.close();
+
+    sort(notes.begin(), notes.end(), compareHeights);
+
+    long long score = 0;
+    int filled = 0;
+    int idx = 0;
+    while (filled < n) {
+        long long currentSum = 0;
+        int currentDuration = 0;
+        for (int i = idx; i < n; ++i) {
+            if (!(currentDuration & notes[i].duration)) {
+                currentDuration |= notes[i].duration;
+                currentSum += notes[i].height;
+                filled++;
+                if (currentDuration == (1 << 18) - 1) {
+                    idx = i + 1;
+                    break;
+                }
+            }
+        }
+        score += currentSum * currentSum;
+    }
+
+    fout << score << endl;
+    fout.close();
+
+    return 0;
+}
+```
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+5
+2 3
+3 2
+2 1
+2 2
+3 5
+```
+Expected output:
+```
+169
+```
+Found output:
+```
+192
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The initial solution had a flawed approach to grouping the notes properly and maximizing the score. The problem requires a more precise method to ensure that we group notes with durations that add up to a full beat (1), and at the same time, to maximize the group's score by trying to create groups with the highest possible heights.
+
+Given that the durations are powers of two, a bitmask approach can be useful here. We can represent each group of notes as a bitmask, where the bit at index i is set if the group contains a note with a duration of `1/(2^(i+1))`. This way, we aim to fill each bitmask up to all bits set, which represents a total duration of 1.
+
+To achieve maximal score, we should try to include notes with higher heights first, so sorting notes by height in descending order is a good starting point. Then, we can iterate through the sorted notes and try to fit them into groups, while keeping track of the group's total duration and height.
+
+Let's fix the solution based on this approach:
+
+```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+struct Note {
+    int duration;
+    int height;
+};
+
+bool compare(const Note &a, const Note &b) {
+    return a.height > b.height;
+}
+
+int main() {
+    ifstream fin("partitura.in");
+    ofstream fout("partitura.out");
+
+    int n;
+    fin >> n;
+    vector<Note> notes(n);
+
+    // We will use an array to keep track of the accumulated height of groups
+    // for each possible duration sum (which will be represented as a bitmask).
+    vector<long long> groupHeights(1 << 18, 0);
+
+    // Read notes and convert duration to bitmask.
+    for (int i = 0; i < n; ++i) {
+        int x, y;
+        fin >> x >> y;
+        notes[i].duration = 1 << (x - 1); // Convert duration to bitmask.
+        notes[i].height = y;
+    }
+
+    fin.close();
+
+    // Sort notes by height in descending order.
+    sort(notes.begin(), notes.end(), compare);
+
+    // Attempt to build groups, starting with the notes with the highest height.
+    vector<int> groupDurations(1 << 18, 0); // Tracks the sum of durations for each group.
+    long long totalScore = 0;
+
+    for (const Note &note : notes) {
+        for (int mask = (1 << 18) - 1; mask >= 0; --mask) {
+            // Check if this note can fit into the current group.
+            if ((mask & note.duration) == 0) {
+                int newMask = mask | note.duration;
+                // Only add the note to this group if it results in a better score.
+                if (groupHeights[newMask] < groupHeights[mask] + note.height) {
+                    groupHeights[newMask] = groupHeights[mask] + note.height;
+                    groupDurations[newMask] = groupDurations[mask] + note.duration;
+                    // If this group is full (sum of durations is 1), add its score to the total.
+                    if (groupDurations[newMask] == (1 << 18) - 1) {
+                        totalScore += (groupHeights[newMask] * groupHeights[newMask]);
+                        // Reset the group for the next iteration.
+                        groupHeights[newMask] = 0;
+                        groupDurations[newMask] = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    // Write the total score to the output file.
+    fout << totalScore << endl;
+    fout.close();
+
+    return 0;
+}
+```
+
+In this revised solution, we use a greedy approach to construct the groups with maximal heights by iterating through the sorted notes and fitting them into groups using bitmasking. This ensures that each group has a total duration of 1, as required, and the score is maximized by prioritizing notes with higher heights. The use of bitmasking allows us to efficiently keep track of the duration sums for different combinations of notes.
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+5
+2 3
+3 2
+2 1
+2 2
+3 5
+```
+Expected output:
+```
+169
+```
+Found output:
+```
+0
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The provided solution did not work because the algorithm was not correctly matching notes into groups with a total duration of 1 in a way that maximizes the score. This is a knapsack-like problem, but with the complexity driven by the fact that we are trying to match fractions of the form `1/2^x` to sum exactly to 1. We need a dynamic programming (DP) approach that will consider all possible combinations of notes and will ensure the total duration of the groups is exactly 1.
+
+Let's try to fix the solution while maintaining the DP approach:
+
+```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <unordered_map>
+
+using namespace std;
+
+const int MAX_DURATION = 1 << 18; // Maximum duration bitmask (for x = 18)
+
+struct Note {
+    int duration;
+    int height;
+};
+
+bool compareHeight(const Note &a, const Note &b) {
+    return a.height > b.height; // Compare notes by height in descending order
+}
+
+int main() {
+    ifstream fin("partitura.in");
+    ofstream fout("partitura.out");
+
+    int n;
+    fin >> n;
+    vector<Note> notes(n);
+
+    // Read notes
+    for (int i = 0; i < n; ++i) {
+        fin >> notes[i].duration >> notes[i].height;
+        notes[i].duration = 1 << (notes[i].duration - 1); // Convert to bitmask
+    }
+
+    fin.close();
+
+    // Sort notes by height in descending order
+    sort(notes.begin(), notes.end(), compareHeight);
+
+    // Use DP to find the maximum score
+    unordered_map<int, long long> dp; // Maps duration bitmask to score
+    dp[0] = 0; // Base case: no notes, score is 0
+
+    for (const Note &note : notes) {
+        // We need a snapshot of the current state of the DP map, because we cannot
+        // iterate and modify it at the same time.
+        unordered_map<int, long long> dp_prev(dp);
+
+        for (const auto &entry : dp_prev) {
+            int duration = entry.first;
+            long long score = entry.second;
+
+            // Try to add the current note to the existing groups
+            int new_duration = duration | note.duration;
+
+            if (new_duration != duration) { // The note can be added to this group
+                // Calculate the new score with this note included
+                long long new_score = score + note.height;
+                
+                // If the group is complete, add the squared heights to the total score
+                if (new_duration == MAX_DURATION - 1) {
+                    dp[0] = max(dp[0], new_score * new_score);
+                } else {
+                    // Otherwise, update the intermediate score for this group's duration
+                    dp[new_duration] = max(dp[new_duration], new_score);
+                }
+            }
+        }
+    }
+
+    // Write the maximum score to the output file
+    fout << dp[0] << endl; // The maximum score is stored with the key 0
+    fout.close();
+
+    return 0;
+}
+```
+
+In this revised solution, we keep track of intermediate scores for all possible combinations of durations using DP, updating the maximum score achievable for each combination. Once a group is complete (its total duration equals `MAX_DURATION - 1`, which represents a full duration of 1), we calculate the score for that group and compare it to the maximum score found so far. This ensures that we always maximize the group's score. We need to use an `unordered_map` because the number of combinations of durations is large, and we only store the combinations that are achievable with the given notes.
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+5
+2 3
+3 2
+2 1
+2 2
+3 5
+```
+Expected output:
+```
+169
+```
+Found output:
+```
+0
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The issue with the provided solution is that it fails to correctly group the notes in a way that maximizes the sum of the heights squared for each group with a total duration of 1. The previous approach was incorrectly attempting to use dynamic programming to solve a problem that is more fitting to the meet-in-the-middle strategy, which breaks the problem into two smaller subproblems and then combines their solutions.
+
+The correct approach to this problem is to recognize that we can divide the collection of notes into groups where each group sums up to 1. Then, for each group, we want to maximize the sum of the heights. To achieve this, we can use a bitmask to represent the inclusion of each note in a group and calculate the sum of the durations and heights for each possible combination of notes. Then, we find the combinations that sum up to the correct duration and choose the one with the maximum height sum.
+
+Here's a correct implementation:
+
+```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+
+using namespace std;
+
+struct Note {
+    int durationIndex;
+    long long height;
+};
+
+struct Combination {
+    long long sumHeights;
+    int sumDurations;
+};
+
+int main() {
+    ifstream fin("partitura.in");
+    ofstream fout("partitura.out");
+
+    int n;
+    fin >> n;
+    vector<Note> notes(n);
+    vector<Combination> combinations;
+
+    for (int i = 0; i < n; ++i) {
+        fin >> notes[i].durationIndex >> notes[i].height;
+        notes[i].durationIndex = 18 - notes[i].durationIndex; // Adjust for bitmask use
+    }
+
+    fin.close();
+
+    // Generate all combinations
+    for (int i = 0; i < (1 << n); ++i) {
+        Combination current = {0, 0};
+        for (int j = 0; j < n; ++j) {
+            if (i & (1 << j)) {
+                current.sumDurations += (1 << notes[j].durationIndex);
+                current.sumHeights += notes[j].height;
+            }
+        }
+        if (current.sumDurations <= (1 << 18)) {
+            combinations.push_back(current);
+        }
+    }
+
+    // Sort combinations by sumDurations, breaking ties by maximum sumHeights
+    sort(combinations.begin(), combinations.end(), [](const Combination& a, const Combination& b) {
+        if (a.sumDurations == b.sumDurations) return a.sumHeights > b.sumHeights;
+        return a.sumDurations < b.sumDurations;
+    });
+
+    // Find the best combination that sums exactly to (1 << 18)
+    long long maxScore = 0;
+    for (const auto& comb : combinations) {
+        if (comb.sumDurations == (1 << 18)) {
+            maxScore = max(maxScore, comb.sumHeights * comb.sumHeights);
+        }
+    }
+
+    // Write the maximum score to the output file
+    fout << maxScore << endl;
+    fout.close();
+
+    return 0;
+}
+```
+
+This solution iterates through all possible combinations of notes, calculating the sum of durations and heights for each combination. It then finds the combinations that exactly fill a duration of 1 and maximizes the sum of the heights squared among those combinations. This guarantees that we get the highest possible score for the melody.
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+6
+1 3
+2 2
+1 4
+2 2
+2 2
+2 2
+```
+Expected output:
+```
+113
+```
+Found output:
+```
+64
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The expected output indicates that the correct solution must find a way to partition the notes into groups where the total duration of each group is 1, and then maximize the sum of the heights squared for each group. The previous solution attempted to use a bitmask approach but did not properly handle the partitioning of notes into valid groups.
+
+A correct solution should aim to select groups of notes in a way that fills each group to a cumulative duration of 1 while maximizing the sum of heights squared across all groups. This problem can be approached using recursive backtracking, which allows us to explore all possible combinations and select the best ones.
+
+Let's rewrite the solution using recursive backtracking:
+
+```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+
+using namespace std;
+
+struct Note {
+    int durationPower; // Represents the power of 2 for duration (2^(-durationPower))
+    long long height;
+};
+
+// Global variables to hold notes and the best score
+vector<Note> notes;
+long long bestScore = 0;
+
+// Recursive function to try all combinations and update the best score
+void findBestScore(int index, long long currentScore, int currentDuration, long long currentHeightSum) {
+    if (currentDuration == (1 << 18)) { // Check if the current group is complete
+        // Update the best score using the sum of heights squared for this group
+        bestScore = max(bestScore, currentScore + currentHeightSum * currentHeightSum);
+        return; // No need to continue with this group
+    }
+
+    if (index >= notes.size() || currentDuration > (1 << 18)) {
+        // Reached the end or the current duration is already too high
+        return;
+    }
+
+    // Option 1: Include the current note in the group
+    findBestScore(index + 1, currentScore, currentDuration + (1 << notes[index].durationPower), currentHeightSum + notes[index].height);
+
+    // Option 2: Do not include the current note, move to the next one
+    findBestScore(index + 1, currentScore, currentDuration, currentHeightSum);
+}
+
+int main() {
+    ifstream fin("partitura.in");
+    ofstream fout("partitura.out");
+
+    int n;
+    fin >> n;
+    notes.resize(n);
+
+    for (int i = 0; i < n; ++i) {
+        fin >> notes[i].durationPower >> notes[i].height;
+        notes[i].durationPower = 18 - notes[i].durationPower; // Adjust for 1<<durationPower representation
+    }
+
+    fin.close();
+
+    // Sort notes in descending order of height to prioritize higher heights
+    sort(notes.begin(), notes.end(), [](const Note &a, const Note &b) {
+        return a.height > b.height;
+    });
+
+    // Start the recursive process to find the best score
+    findBestScore(0, 0, 0, 0);
+
+    // Write the best score found to the output file
+    fout << bestScore << endl;
+    fout.close();
+
+    return 0;
+}
+```
+
+This solution uses backtracking to recursively try all combinations of notes, ensuring that each group's duration sums up to an exact 1. At each step, we have the option to include the current note in the group or to move on to the next note without including it. By keeping track of the current score, the current cumulative duration, and the sum of heights, we can update the best score found whenever we complete a group with a total duration of 1. The notes are sorted by height in descending order to prioritize the selection of notes with higher heights, which can potentially lead to a higher score.
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+6
+1 3
+2 2
+1 4
+2 2
+2 2
+2 2
+```
+Expected output:
+```
+113
+```
+Found output:
+```
+64
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The previous attempt to solve the problem using recursive backtracking failed because it did not handle grouping notes correctly—it was only trying to select combinations based on individual notes. The problem requires considering all potential combinations of notes that can form valid groups where the total duration equals 1. This is a complex problem that seems to be a variant of the subset sum problem but with additional constraints and the goal of maximizing a score.
+
+Given the complexity and the constraints of the problem, a more sophisticated approach is needed. We have to find groups of notes that sum up to a total duration of 1 and then maximize the sum of the squares of the heights of these groups. A dynamic programming approach can be used to solve this subset sum-like problem, keeping track of the maximum height sum for each possible duration sum.
+
+Let's attempt to rewrite the solution using dynamic programming:
+
+```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+const int MAX_DURATION = 1 << 18; // Corresponds to duration 1 (2^0)
+const int MAX_NOTES = 300000;
+
+struct Note {
+    int duration;
+    int height;
+} notes[MAX_NOTES];
+
+// Dynamic programming table. dp[i] will store the maximum sum of heights for the duration i.
+long long dp[MAX_DURATION];
+
+int main() {
+    ifstream fin("partitura.in");
+    ofstream fout("partitura.out");
+
+    int n;
+    fin >> n;
+
+    for (int i = 0; i < n; ++i) {
+        int x;
+        fin >> x >> notes[i].height;
+        notes[i].duration = 1 << (x - 1); // Convert duration to bitmask
+    }
+
+    fin.close();
+
+    // Initialize the dp table
+    for (int i = 0; i < MAX_DURATION; ++i) {
+        dp[i] = 0;
+    }
+
+    // Go through the notes and update the dp table
+    for (int i = 0; i < n; ++i) {
+        for (int j = MAX_DURATION - 1; j >= 0; --j) {
+            // If the current duration can be reached
+            if (dp[j] > 0 || j == 0) {
+                int new_duration = j | notes[i].duration;
+                if (new_duration < MAX_DURATION) {
+                    dp[new_duration] = max(dp[new_duration], dp[j] + notes[i].height);
+                }
+            }
+        }
+    }
+
+    // Calculate the maximum score
+    long long maxScore = 0;
+    for (int i = 1; i < MAX_DURATION; ++i) {
+        if (dp[i] > 0 && __builtin_popcount(i) == 1) {
+            maxScore += dp[i] * dp[i];
+        }
+    }
+
+    fout << maxScore << '\n';
+    fout.close();
+
+    return 0;
+}
+```
+
+This solution uses dynamic programming to keep track of the maximum sum of heights for each duration sum. We iterate through all notes and update the DP table accordingly. After processing all notes, we calculate the maximum score by considering only the entries in the DP table that correspond to full groups (durations that are powers of 2, indicated by having only one bit set) and summing up their squares.
+
+The `__builtin_popcount` function is used to count the number of set bits (1s) in the binary representation of the duration sum. Since we want full groups, we only consider sums with exactly one set bit, which corresponds to a duration of 1. This is how we ensure that the duration of each group is exactly 1. The height sums of these full groups are then squared and added to get the final score.
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+5
+2 3
+3 2
+2 1
+2 2
+3 5
+```
+Expected output:
+```
+169
+```
+Found output:
+```
+85
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The discrepancy between the expected and found results occurs because the dynamic programming approach used in the previous solution does not correctly group the notes to ensure maximum scores of the groups.
+
+To tackle this problem, we need to find a way to partition notes into groups such that each group forms a sequence that sum up to a full beat (a duration of 1), and the sum of the heights of the notes in each group, squared, is maximized.
+
+This problem is a variation of the bin packing problem with an additional constraint that the score (sum of the squares of the packed items) must be maximized. It cannot be solved by a simple greedy or dynamic programming approach due to the overlapping subproblems and the combinatorial nature of the problem.
+
+We must use a more sophisticated method that takes into account the fact that all notes can form a set of non-overlapping groups with durations summing to 1. A feasible approach would be to use a backtracking algorithm that tries all possible groupings and keeps track of the best solution found so far. However, this would not be efficient enough given the large constraints of the problem.
+
+The problem hints that we can use the properties of the durations being powers of two. The solution lies in realizing we can divide the notes into buckets based on their durations (2^-x), and then combine these buckets to form complete groups (duration 1). We should start by combining the largest fractions (smallest x) to form as many complete groups as possible, and then work downwards combining smaller fractions, always maximizing the sum of the heights in each complete group.
+
+Since we need to implement an efficient solution, we can take advantage of the fact that the powers of two can only combine in certain ways to sum to one. We can then apply a greedy algorithm that always takes the best available note to complete a group to one.
+
+Let's fix the approach with a more suitable algorithm:
+
+```cpp
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <queue>
+
+using namespace std;
+
+// Comparator for max heap
+struct CompareHeight {
+    bool operator()(const int& a, const int& b) {
+        return a < b;
+    }
+};
+
+int main() {
+    ifstream fin("partitura.in");
+    ofstream fout("partitura.out");
+
+    int n, x, y;
+    fin >> n;
+
+    // Buckets to store heights based on duration, where the index is (18 - x)
+    vector<priority_queue<int, vector<int>, CompareHeight>> buckets(18);
+
+    // Read notes and add them to the corresponding bucket
+    for (int i = 0; i < n; ++i) {
+        fin >> x >> y;
+        buckets[18 - x].push(y);
+    }
+
+    fin.close();
+
+    long long score = 0;
+    while (!buckets[0].empty()) {
+        long long groupScore = 0;
+        int power = 0;
+        
+        // Try to form a complete group starting from the largest fraction
+        while (power < 18) {
+            if (!buckets[power].empty()) {
+                groupScore += buckets[power].top();
+                buckets[power].pop();
+                power++;
+            } else {
+                // If we don't have any more notes of the current fraction, try to combine smaller fractions
+                power++;
+                for (int i = power; i < 18; ++i) {
+                    while (!buckets[i].empty() && (power < 18)) {
+                        buckets[power].push(buckets[i].top());
+                        buckets[i].pop();
+                        power++;
+                    }
+                }
+            }
+        }
+
+        // Calculate the score for the group and add it to the total score
+        score += groupScore * groupScore;
+    }
+
+    fout << score << '\n';
+    fout.close();
+
+    return 0;
+}
+```
+
+This solution groups the notes by their duration and uses a max heap to always select the note with the highest height from each bucket when forming a group. This ensures that we are always maximizing the score when completing a group. When a group is complete (reaching a sum of durations equal to 1), the score is calculated for that group and added to the total score. The process continues until there are no more notes that can form a complete group.

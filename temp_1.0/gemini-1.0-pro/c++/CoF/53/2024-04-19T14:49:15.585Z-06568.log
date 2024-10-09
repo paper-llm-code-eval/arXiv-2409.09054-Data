@@ -1,0 +1,1441 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `mosia.in` and write to `mosia.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Păcală a primit, aşa cum era învoiala, un petec de teren de pe moşia boierului. Terenul este împrejmuit complet cu segmente drepte de gard ce se sprijină la ambele capete de câte un par zdravăn. La o nouă prinsoare, Păcală iese iar in câştig şi primeşte dreptul să strămute nişte pari, unul câte unul, cum i-o fi voia, astfel încât să-şi extindă suprafaţa de teren. Dar învoiala prevede că fiecare par poate fi mutat în orice direcţie, dar nu pe o distanţă mai mare decât o valoare dată (scrisă pe fiecare par) şi fiecare segment de gard, fiind cam şubred, poate fi rotit şi prelungit de la un singur capăt, celălalt rămânând nemişcat.
+
+Cunoscând poziţiile iniţiale ale parilor şi valoarea înscrisă pe fiecare par, se cere suprafaţa maximă cu care poate să-şi extindă Păcală proprietatea. Se ştie că parii sunt daţi într-o ordine oarecare, poziţiile lor iniţiale sunt date prin numere întregi de cel mult $3$ cifre, distanţele pe care fiecare par poate fi deplasat sunt numere naturale strict pozitive şi figura formată de terenul iniţial este un poligon neconcav,
+
+# Date de intrare
+Fişierul `mosia.in` conţine $n+1$ linii cu următoarele valori:
+$n$				    – numărul de pari
+$x_1  y_1  d_1$		– coordonatele iniţiale şi distanţa pe care poate fi mutat parul $1$
+$x_2  y_2  d_2$		– coordonatele iniţiale şi distanţa pe care poate fi mutat parul $2$
+...
+$x_n  y_n  d_n$		– coordonatele iniţiale şi distanţa pe care poate fi mutat parul $n$
+
+# Date de ieşire
+În fişierul `mosia.out` se scrie un număr real cu $4$ zecimale ce reprezintă suprafaţa maximă cu care se poate mări moşia.
+
+# Restricţii şi observaţii:
+* $3 < N ≤ 200$ număr natural
+* $–1 \ 000 < x_i,y_i < 1 \ 000$ numere întregi
+* $0 < d_i ≤ 20$ numere întregi
+* poligonul neconcav se defineşte ca un poligon convex cu unele vârfuri coliniare
+* poziţiile parilor sunt date într-o ordine oarecare
+* poligonul obţinut după mutarea parilor poate fi concav
+* poziţiile finale ale parilor nu sunt in mod obligatoriu numere naturale
+
+---
+
+Example:
+`mosia.in`
+```
+4
+-3 0 2
+3 0 3
+0 6 2
+0 -6 6
+```
+
+`mosia.out`
+```
+30.0000
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <vector>
+#include <fstream>
+#include <cmath>
+#include <algorithm>
+#include <string>
+#include <iomanip>
+#include <iostream>
+ 
+using namespace std;
+ 
+template<typename T>
+std::vector<T> split(const std::string& input, char delimiter)
+{
+    std::vector<std::string> intermediate;
+    std::stringstream ss(input);
+    std::string item;
+    while (std::getline(ss, item, delimiter)) {
+        intermediate.push_back(item);
+    }
+    std::vector<T> out;
+    std::transform(intermediate.begin(), intermediate.end(), back_inserter(out), [](const std::string& str) { return std::stoi(str); });
+    return out;
+}
+ 
+template<typename T>
+std::pair<T, T> make_point(T x, T y)
+{
+    return std::pair<T, T>(x, y);
+}
+ 
+template<typename T>
+tuple<T, T, T> make_tuple(T a, T b, T c)
+{
+    return std::make_tuple(a, b, c);
+}
+ 
+typedef long long ll;
+typedef double db;
+typedef vector<ll> vi;
+typedef pair<ll, ll> pi;
+typedef tuple<ll, ll, ll> tpl;
+ 
+template<typename T>
+T square(T x)
+{
+    return x * x;
+}
+ 
+template<typename T>
+bool in_range(T a, T low, T high)
+{
+    return (a >= low) && (a <= high);
+}
+ 
+template<typename A, typename B>
+bool spp(const pair<A, B>& lhs, const pair<A, B>& rhs)
+{
+    return lhs.second < rhs.second;
+}
+ 
+template<typename T>
+bool spp(const T& lhs, const T& rhs)
+{
+    return lhs < rhs;
+}
+ 
+struct Point
+{
+    ll x;
+    ll y;
+ 
+    ll manhattan(const Point& other) const
+    {
+        return abs(this->x - other.x) + abs(this->y - other.y);
+    }
+ 
+    Point operator+(const Point& B) const
+    {
+        return Point{ this->x + B.x,  this->y + B.y };
+    }
+ 
+    Point operator-(const Point& B) const
+    {
+        return Point{ this->x - B.x,  this->y - B.y };
+    }
+ 
+    bool operator==(const Point& B) const
+    {
+        return (this->x == B.x) && (this->y == B.y);
+    }
+
+    db cross(const Point& B) const
+    {
+        return this->x * B.y - this->y * B.x;
+    }
+ 
+    bool clockwise(const Point& B, const Point& C) const
+    {
+        return (B.x - this->x) * (C.y - this->y) - (B.y - this->y) * (C.x - this->x) < 0;
+    }
+
+    bool between(const Point& B, const Point& C) const
+    {
+        bool x_between = between(this->x, B.x, C.x);
+        bool y_between = between(this->y, B.y, C.y);
+
+        return (x_between || y_between) && !C.clockwise(B, this);
+    }
+ 
+private:
+    bool between(ll a, ll b, ll c) const
+    {
+        return in_range(a, b, c) || in_range(a, c, b);
+    }
+};
+ 
+inline ll determinant(const Point& a, const Point& b, const Point& c)
+{
+  return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+}
+ 
+inline db polygon_area(const vector<Point>& points)
+{
+    ll DA = 0;
+
+    for (size_t i = 1; i + 1 < points.size(); i += 2)
+    {
+        DA += determinant(Point{ 0, 0, 0 }, points[i], points[i + 1]);
+    }
+
+    return fabs(DA) / 2.0;
+}
+ 
+int main()
+{
+    ifstream input("mosia.in");
+    ofstream output("mosia.out");
+ 
+    string line;
+    ll n;
+ 
+    getline(input, line);
+    n = stoi(line);
+ 
+    vector<tuple<pi, ll>> stakes;
+ 
+    while (getline(input, line))
+    {
+        vector<ll> tmp = split<ll>(line, ' ');
+ 
+        stakes.push_back(make_tuple(make_point(tmp[0], tmp[1]), tmp[2]));
+    }
+ 
+    input.close();
+ 
+    ll min_x = LLONG_MAX;
+    ll min_y = LLONG_MAX;
+    ll max_x = LLONG_MIN;
+    ll max_y = LLONG_MIN;
+ 
+    for (size_t i = 0; i < n; i++)
+    {
+        const pi& point = get<0>(stakes[i]);
+ 
+        min_x = min(min_x, point.first);
+        min_y = min(min_y, point.second);
+        max_x = max(max_x, point.first);
+        max_y = max(max_y, point.second);
+    }
+ 
+    const ll size_x = max_x - min_x + 1;
+    const ll size_y = max_y - min_y + 1;
+ 
+    vector<pi> points(n);
+ 
+    for (size_t i = 0; i < n; i++)
+    {
+        const pi& point = get<0>(stakes[i]);
+        const ll distance = get<2>(stakes[i]);
+ 
+        points[i] = make_point(point.first - min_x, point.second - min_y);
+    }
+ 
+    const Point tl = Point{ 0, 0 };
+    const Point tr = Point{ size_x - 1, 0 };
+    const Point br = Point{ size_x - 1, size_y - 1 };
+    const Point bl = Point{ 0, size_y - 1 };
+    const Point center = Point{ (size_x - 1) / 2, (size_y - 1) / 2 };
+ 
+    sort(points.begin(), points.end());
+    points.push_back(points.back());
+ 
+    db total_area = 0;
+ 
+    for (size_t i = 0; i < n; i++)
+    {
+        const pi& point = points[i];
+        const ll distance = get<2>(stakes[i]);
+ 
+        Point p = Point{ point.first, point.second };
+        Point a;
+        Point b;
+ 
+        if (point == points.back())
+        {
+            a = points.front();
+            b = points.front();
+        }
+        else
+        {
+            a = points[i - 1];
+            b = points[i + 1];
+        }
+ 
+        Point l = p - a;
+        Point r = b - p;
+ 
+        bool outside_triangle = [](const Point& P, const Point& p, const Point& a, const Point& b) -> bool
+        {
+            return !p.between(a, b);
+        };
+ 
+        db max_dist_a = 0;
+        db max_dist_b = 0;
+        db max_dist_2 = 0;
+        bool intersects_ = false;
+        bool diagonal_left_ = false;
+        bool diagonal_right_ = false;
+ 
+        if (l.x == 0)
+        {
+            if (!outside_triangle(tr, p, a, b))
+            {
+                max_dist_a = db(distance);
+                max_dist_b = db(distance - (tr - p).y);
+ 
+                diagonal_left
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <vector>
+#include <fstream>
+#include <cmath>
+#include <algorithm>
+#include <string>
+#include <iomanip>
+#include <iostream>
+ 
+using namespace std;
+ 
+template<typename T>
+std::vector<T> split(const std::string& input, char delimiter)
+{
+    std::vector<std::string> intermediate;
+    std::stringstream ss(input);
+    std::string item;
+    while (std::getline(ss, item, delimiter)) {
+        intermediate.push_back(item);
+    }
+    std::vector<T> out;
+    std::transform(intermediate.begin(), intermediate.end(), back_inserter(out), [](const std::string& str) { return std::stoi(str); });
+    return out;
+}
+ 
+template<typename T>
+std::pair<T, T> make_point(T x, T y)
+{
+    return std::pair<T, T>(x, y);
+}
+ 
+template<typename T>
+tuple<T, T, T> make_tuple(T a, T b, T c)
+{
+    return std::make_tuple(a, b, c);
+}
+ 
+typedef long long ll;
+typedef double db;
+typedef vector<ll> vi;
+typedef pair<ll, ll> pi;
+typedef tuple<ll, ll, ll> tpl;
+ 
+template<typename T>
+T square(T x)
+{
+    return x * x;
+}
+ 
+template<typename T>
+bool in_range(T a, T low, T high)
+{
+    return (a >= low) && (a <= high);
+}
+ 
+template<typename A, typename B>
+bool spp(const pair<A, B>& lhs, const pair<A, B>& rhs)
+{
+    return lhs.second < rhs.second;
+}
+ 
+template<typename T>
+bool spp(const T& lhs, const T& rhs)
+{
+    return lhs < rhs;
+}
+ 
+struct Point
+{
+    ll x;
+    ll y;
+ 
+    ll manhattan(const Point& other) const
+    {
+        return abs(this->x - other.x) + abs(this->y - other.y);
+    }
+ 
+    Point operator+(const Point& B) const
+    {
+        return Point{ this->x + B.x,  this->y + B.y };
+    }
+ 
+    Point operator-(const Point& B) const
+    {
+        return Point{ this->x - B.x,  this->y - B.y };
+    }
+ 
+    bool operator==(const Point& B) const
+    {
+        return (this->x == B.x) && (this->y == B.y);
+    }
+
+    db cross(const Point& B) const
+    {
+        return this->x * B.y - this->y * B.x;
+    }
+ 
+    bool clockwise(const Point& B, const Point& C) const
+    {
+        return (B.x - this->x) * (C.y - this->y) - (B.y - this->y) * (C.x - this->x) < 0;
+    }
+
+    bool between(const Point& B, const Point& C) const
+    {
+        bool x_between = between(this->x, B.x, C.x);
+        bool y_between = between(this->y, B.y, C.y);
+
+        return (x_between || y_between) && !C.clockwise(B, this);
+    }
+ 
+private:
+    bool between(ll a, ll b, ll c) const
+    {
+        return in_range(a, b, c) || in_range(a, c, b);
+    }
+};
+ 
+inline ll determinant(const Point& a, const Point& b, const Point& c)
+{
+  return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+}
+ 
+inline db polygon_area(const vector<Point>& points)
+{
+    ll DA = 0;
+
+    for (size_t i = 1; i + 1 < points.size(); i += 2)
+    {
+        DA += determinant(Point{ 0, 0, 0 }, points[i], points[i + 1]);
+    }
+
+    return fabs(DA) / 2.0;
+}
+ 
+int main()
+{
+    ifstream input("mosia.in");
+    ofstream output("mosia.out");
+ 
+    string line;
+    ll n;
+ 
+    getline(input, line);
+    n = stoi(line);
+ 
+    vector<tuple<pi, ll>> stakes;
+ 
+    while (getline(input, line))
+    {
+        vector<ll> tmp = split<ll>(line, ' ');
+ 
+        stakes.push_back(make_tuple(make_point(tmp[0], tmp[1]), tmp[2]));
+    }
+ 
+    input.close();
+ 
+    ll min_x = LLONG_MAX;
+    ll min_y = LLONG_MAX;
+    ll max_x = LLONG_MIN;
+    ll max_y = LLONG_MIN;
+ 
+    for (size_t i = 0; i < n; i++)
+    {
+        const pi& point = get<0>(stakes[i]);
+ 
+        min_x = min(min_x, point.first);
+        min_y = min(min_y, point.second);
+        max_x = max(max_x, point.first);
+        max_y = max(max_y, point.second);
+    }
+ 
+    const ll size_x = max_x - min_x + 1;
+    const ll size_y = max_y - min_y + 1;
+ 
+    vector<pi> points(n);
+ 
+    for (size_t i = 0; i < n; i++)
+    {
+        const pi& point = get<0>(stakes[i]);
+        const ll distance = get<2>(stakes[i]);
+ 
+        points[i] = make_point(point.first - min_x, point.second - min_y);
+    }
+ 
+    const Point tl = Point{ 0, 0 };
+    const Point tr = Point{ size_x - 1, 0 };
+    const Point br = Point{ size_x - 1, size_y - 1 };
+    const Point bl = Point{ 0, size_y - 1 };
+    const Point center = Point{ (size_x - 1) / 2, (size_y - 1) / 2 };
+ 
+    sort(points.begin(), points.end());
+    points.push_back(points.back());
+ 
+    db total_area = 0;
+ 
+    for (size_t i = 0; i < n; i++)
+    {
+        const pi& point = points[i];
+        const ll distance = get<2>(stakes[i]);
+ 
+        Point p = Point{ point.first, point.second };
+        Point a;
+        Point b;
+ 
+        if (point == points.back())
+        {
+            a = points.front();
+            b = points.front();
+        }
+        else
+        {
+            a = points[i - 1];
+            b = points[i + 1];
+        }
+ 
+        Point l = p - a;
+        Point r = b - p;
+ 
+        bool outside_triangle = [](const Point& P, const Point& p, const Point& a, const Point& b) -> bool
+        {
+            return !p.between(a, b);
+        };
+ 
+        db max_dist_a = 0;
+        db max_dist_b = 0;
+        db max_dist_2 = 0;
+        bool intersects_ = false;
+        bool diagonal_left_ = false;
+        bool diagonal_right_ = false;
+ 
+        if (l.x == 0)
+        {
+            if (!outside_triangle(tr, p, a, b))
+            {
+                max_dist_a = db(distance);
+                max_dist_b = db(distance - (tr - p).y);
+ 
+                diagonal_left```c++
+#include <fstream>
+#include <vector>
+#include <cmath>
+#include <set>
+
+typedef long long INT64;
+typedef unsigned int UINT32;
+
+const double EPSILON = 1e-9;
+
+struct POINT {
+   INT64 x, y;
+
+   POINT() {}
+   POINT(INT64 _x, INT64 _y): x(_x), y(_y) {}
+
+   bool operator== (const POINT rhs) const {
+      return fabs(x - rhs.x) <= EPSILON && fabs(y - rhs.y) <= EPSILON;
+   }
+
+   double cross(const POINT& rhs) const {
+      return x * rhs.y - y * rhs.x;
+   }
+
+   double dot(const POINT& rhs) const {
+      return x * rhs.x + y * rhs.y;
+   }
+};
+
+struct SEGMENT {
+   POINT a, b;
+
+   SEGMENT() {}
+   SEGMENT(const POINT& _a, const POINT& _b): a(_a), b(_b) {}
+
+   POINT to_vector() const {
+      return POINT(b.x - a.x, b.y - a.y);
+   }
+};
+
+int n;
+std::vector<POINT> v;
+std::vector<std::vector<POINT> > convex_hull;
+std::set<std::pair<double, POINT> > h;
+
+double signed_area() {
+   double area = 0;
+   for (UINT32 i = 0; i < convex_hull.size(); ++i) {
+      UINT32 next = (i + 1) % convex_hull.size();
+      area += convex_hull[i].cross(convex_hull[next]);
+   }
+   return area / 2.0;
+}
+
+void precompute_convex_hull() {
+   convex_hull.clear();
+   for (UINT32 i = 0; i < v.size(); ++i) {
+      std::vector<POINT> ch;
+      UINT32 k = convex_hull.size();
+      for (UINT32 j = 0; j < k; ++j) {
+         while(convex_hull.size() >= 2) {
+            SEGMENT s1(convex_hull.back(), v[i]);
+            SEGMENT s2(convex_hull[convex_hull.size() - 2], convex_hull.back());
+            if (s1.to_vector().cross(s2.to_vector()) <= EPSILON) {
+               convex_hull.pop_back();
+            }
+            else {
+               break;
+            }
+         }
+         convex_hull.push_back(v[i]);
+      }
+   }
+
+   h.clear();
+   for (UINT32 i = 0; i < convex_hull.size(); ++i) {
+      UINT32 next = (i + 1) % convex_hull.size();
+      POINT vec = convex_hull[next] - convex_hull[i];
+      double angle = atan2(vec.y, vec.x);
+      h.insert(std::make_pair(angle, convex_hull[i]));
+   }
+}
+
+double get_answer() {
+   double answer = signed_area();
+
+   std::set<std::pair<double, POINT> >::iterator sit, eit;
+   eit = h.end();
+   double min_area = 1e18;
+   INT64 to_be_removed = 0;
+   for (UINT32 i = 0; i < v.size(); ++i) {
+      POINT p = v[i];
+
+      for (sit = h.lower_bound(std::make_pair(-M_PI + EPSILON, p)); sit != eit; ++sit) {
+         UINT32 next_convex = (convex_hull.size() + sit - h.begin()) % convex_hull.size();
+         POINT j = convex_hull[next_convex];
+         SEGMENT s(p, j);
+         POINT k;
+         for (UINT32 j = 0; j < convex_hull.size(); ++j) {
+            k = convex_hull[j];
+            if (s.to_vector().cross(SEGMENT(p, k).to_vector()) >= EPSILON) {
+               break;
+            }
+         }
+         double area = 0;
+         for (UINT32 l = 0; l < convex_hull.size(); ++l) {
+            UINT32 next = (l + 1) % convex_hull.size();
+            if ((p != convex_hull[l]) && (j != convex_hull[next]) && (k != convex_hull[next])) {
+               area += POINT(convex_hull[next] - convex_hull[l]).cross(p - convex_hull[l]);
+            }
+         }
+         area = fabs(area);
+         area /= 2.0;
+         if (min_area > area) {
+            min_area = area;
+            eit = sit;
+            to_be_removed = i + 1;
+         }
+      }
+   }
+
+   if (to_be_removed != 0) {
+      answer += min_area;
+      v.erase(v.begin() + (to_be_removed - 1));
+      precompute_convex_hull();
+   }
+
+   return answer;
+}
+
+int main() {
+   std::ifstream in("mosia.in");
+   std::ofstream out("mosia.out");
+   in >> n;
+   v.resize(n + 1);
+   for (UINT32 i = 0; i < n; ++i) {
+      in >> v[i].x >> v[i].y;
+   }
+   precompute_convex_hull();
+   out.precision(4);
+   out.setf(std::ios::fixed, std::ios::floatfield);
+   out << get_answer() << '\n';
+   return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In member function 'bool Point::between(const Point&, const Point&) const':
+main.cpp:107:60: error: cannot convert 'const Point*' to 'const Point&'
+  107 |         return (x_between || y_between) && !C.clockwise(B, this);
+      |                                                            ^~~~
+      |                                                            |
+      |                                                            const Point*
+main.cpp:97:49: note:   initializing argument 2 of 'bool Point::clockwise(const Point&, const Point&) const'
+   97 |     bool clockwise(const Point& B, const Point& C) const
+      |                                    ~~~~~~~~~~~~~^
+main.cpp: In function 'll determinant(const Point&, const Point&, const Point&)':
+main.cpp:119:25: error: 'const struct Point' has no member named 'z'
+  119 |   return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+      |                         ^
+main.cpp:119:39: error: 'const struct Point' has no member named 'z'
+  119 |   return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+      |                                       ^
+main.cpp:119:53: error: 'const struct Point' has no member named 'z'
+  119 |   return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+      |                                                     ^
+main.cpp:119:73: error: 'const struct Point' has no member named 'z'
+  119 |   return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+      |                                                                         ^
+main.cpp:119:105: error: 'const struct Point' has no member named 'z'
+  119 |   return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+      |                                                                                                         ^
+main.cpp:119:119: error: 'const struct Point' has no member named 'z'
+  119 |   return (a.x * b.y * c.z) + (a.y * b.z * c.x) + (a.z * b.x * c.y) - (a.z * b.y * c.x) - (a.y * b.x * c.z) - (a.x * b.z * c.y);
+      |                                                                                                                       ^
+main.cpp: In function 'db polygon_area(const std::vector<Point>&)':
+main.cpp:128:42: error: too many initializers for 'Point'
+  128 |         DA += determinant(Point{ 0, 0, 0 }, points[i], points[i + 1]);
+      |                                          ^
+main.cpp: In function 'int main()':
+main.cpp:156:16: error: 'LLONG_MAX' was not declared in this scope
+  156 |     ll min_x = LLONG_MAX;
+      |                ^~~~~~~~~
+main.cpp:8:1: note: 'LLONG_MAX' is defined in header '<climits>'; did you forget to '#include <climits>'?
+    7 | #include <iostream>
+  +++ |+#include <climits>
+    8 | 
+main.cpp:158:16: error: 'LLONG_MIN' was not declared in this scope
+  158 |     ll max_x = LLONG_MIN;
+      |                ^~~~~~~~~
+main.cpp:158:16: note: 'LLONG_MIN' is defined in header '<climits>'; did you forget to '#include <climits>'?
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple: In instantiation of 'struct std::tuple_element<0, std::tuple<> >':
+/usr/local/include/c++/11.4.0/tuple:1353:12:   recursively required from 'struct std::tuple_element<1, std::tuple<long long int> >'
+/usr/local/include/c++/11.4.0/tuple:1353:12:   required from 'struct std::tuple_element<2, std::tuple<std::pair<long long int, long long int>, long long int> >'
+/usr/local/include/c++/11.4.0/utility:118:11:   required by substitution of 'template<long unsigned int __i, class _Tp> using __tuple_element_t = typename std::tuple_element::type [with long unsigned int __i = 2; _Tp = std::tuple<std::pair<long long int, long long int>, long long int>]'
+/usr/local/include/c++/11.4.0/tuple:1414:5:   required by substitution of 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >&& std::get(const std::tuple<_UTypes ...>&&) [with long unsigned int __i = 2; _Elements = {std::pair<long long int, long long int>, long long int}]'
+main.cpp:179:35:   required from here
+/usr/local/include/c++/11.4.0/tuple:1371:25: error: static assertion failed: tuple index must be in range
+ 1371 |       static_assert(__i < tuple_size<tuple<>>::value,
+      |                     ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/tuple:1371:25: note: '(0 < ((long unsigned int)std::integral_constant<long unsigned int, 0>::value))' evaluates to false
+main.cpp:179:35: error: no matching function for call to 'get<2>(__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:223:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type& std::get(std::pair<_Tp1, _Tp2>&)'
+  223 |     get(pair<_Tp1, _Tp2>& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:223:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::pair<_Tp1, _Tp2>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:228:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type&& std::get(std::pair<_Tp1, _Tp2>&&)'
+  228 |     get(pair<_Tp1, _Tp2>&& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:228:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::pair<_Tp1, _Tp2>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:233:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr const typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type& std::get(const std::pair<_Tp1, _Tp2>&)'
+  233 |     get(const pair<_Tp1, _Tp2>& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:233:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::pair<_Tp1, _Tp2>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:238:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr const typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type&& std::get(const std::pair<_Tp1, _Tp2>&&)'
+  238 |     get(const pair<_Tp1, _Tp2>&& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:238:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::pair<_Tp1, _Tp2>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:247:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_T1, _T2>&)'
+  247 |     get(pair<_Tp, _Up>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:247:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_T1, _T2>&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:252:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_T1, _T2>&)'
+  252 |     get(const pair<_Tp, _Up>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:252:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_T1, _T2>&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:257:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_T1, _T2>&&)'
+  257 |     get(pair<_Tp, _Up>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:257:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_T1, _T2>&&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:262:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_T1, _T2>&&)'
+  262 |     get(const pair<_Tp, _Up>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:262:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_T1, _T2>&&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:267:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_Up, _Tp>&)'
+  267 |     get(pair<_Up, _Tp>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:267:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_Up, _Tp>&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:272:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_Up, _Tp>&)'
+  272 |     get(const pair<_Up, _Tp>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:272:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_Up, _Tp>&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:277:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_Up, _Tp>&&)'
+  277 |     get(pair<_Up, _Tp>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:277:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_Up, _Tp>&&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:282:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_Up, _Tp>&&)'
+  282 |     get(const pair<_Up, _Tp>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:282:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_Up, _Tp>&&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:361:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr _Tp& std::get(std::array<_Tp, _Nm>&)'
+  361 |     get(array<_Tp, _Nm>& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:361:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::array<_Tp, _Nm>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:369:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr _Tp&& std::get(std::array<_Tp, _Nm>&&)'
+  369 |     get(array<_Tp, _Nm>&& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:369:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::array<_Tp, _Nm>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:377:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr const _Tp& std::get(const std::array<_Tp, _Nm>&)'
+  377 |     get(const array<_Tp, _Nm>& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:377:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::array<_Tp, _Nm>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:385:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr const _Tp&& std::get(const std::array<_Tp, _Nm>&&)'
+  385 |     get(const array<_Tp, _Nm>&& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:385:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::array<_Tp, _Nm>'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1393:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >& std::get(std::tuple<_UTypes ...>&)'
+ 1393 |     get(tuple<_Elements...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1393:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility: In substitution of 'template<long unsigned int __i, class _Tp> using __tuple_element_t = typename std::tuple_element::type [with long unsigned int __i = 2; _Tp = std::tuple<std::pair<long long int, long long int>, long long int>]':
+/usr/local/include/c++/11.4.0/tuple:1393:5:   required by substitution of 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >& std::get(std::tuple<_UTypes ...>&) [with long unsigned int __i = 2; _Elements = {std::pair<long long int, long long int>, long long int}]'
+main.cpp:179:35:   required from here
+/usr/local/include/c++/11.4.0/utility:118:11: error: no type named 'type' in 'struct std::tuple_element<2, std::tuple<std::pair<long long int, long long int>, long long int> >'
+  118 |     using __tuple_element_t = typename tuple_element<__i, _Tp>::type;
+      |           ^~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1399:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >& std::get(const std::tuple<_UTypes ...>&)'
+ 1399 |     get(const tuple<_Elements...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1399:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/tuple:1405:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >&& std::get(std::tuple<_UTypes ...>&&)'
+ 1405 |     get(tuple<_Elements...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1405:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/tuple:1414:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >&& std::get(const std::tuple<_UTypes ...>&&)'
+ 1414 |     get(const tuple<_Elements...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1414:5: note:   substitution of deduced template arguments resulted in errors seen above
+/usr/local/include/c++/11.4.0/tuple:1449:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr _Tp& std::get(std::tuple<_UTypes ...>&)'
+ 1449 |     get(tuple<_Types...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1449:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr _Tp& std::get(std::tuple<_UTypes ...>&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1460:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr _Tp&& std::get(std::tuple<_UTypes ...>&&)'
+ 1460 |     get(tuple<_Types...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1460:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr _Tp&& std::get(std::tuple<_UTypes ...>&&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1471:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr const _Tp& std::get(const std::tuple<_UTypes ...>&)'
+ 1471 |     get(const tuple<_Types...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1471:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr const _Tp& std::get(const std::tuple<_UTypes ...>&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1483:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr const _Tp&& std::get(const std::tuple<_UTypes ...>&&)'
+ 1483 |     get(const tuple<_Types...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1483:5: note:   template argument deduction/substitution failed:
+main.cpp:179:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr const _Tp&& std::get(const std::tuple<_UTypes ...>&&)'
+  179 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:179:35: note:   expected a type, got '2'
+main.cpp:198:35: error: no matching function for call to 'get<2>(__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:223:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type& std::get(std::pair<_Tp1, _Tp2>&)'
+  223 |     get(pair<_Tp1, _Tp2>& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:223:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::pair<_Tp1, _Tp2>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:228:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type&& std::get(std::pair<_Tp1, _Tp2>&&)'
+  228 |     get(pair<_Tp1, _Tp2>&& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:228:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::pair<_Tp1, _Tp2>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:233:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr const typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type& std::get(const std::pair<_Tp1, _Tp2>&)'
+  233 |     get(const pair<_Tp1, _Tp2>& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:233:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::pair<_Tp1, _Tp2>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:238:5: note: candidate: 'template<long unsigned int _Int, class _Tp1, class _Tp2> constexpr const typename std::tuple_element<_Int, std::pair<_Tp1, _Tp2> >::type&& std::get(const std::pair<_Tp1, _Tp2>&&)'
+  238 |     get(const pair<_Tp1, _Tp2>&& __in) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:238:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::pair<_Tp1, _Tp2>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:247:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_T1, _T2>&)'
+  247 |     get(pair<_Tp, _Up>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:247:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_T1, _T2>&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:252:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_T1, _T2>&)'
+  252 |     get(const pair<_Tp, _Up>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:252:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_T1, _T2>&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:257:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_T1, _T2>&&)'
+  257 |     get(pair<_Tp, _Up>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:257:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_T1, _T2>&&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:262:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_T1, _T2>&&)'
+  262 |     get(const pair<_Tp, _Up>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:262:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_T1, _T2>&&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:267:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_Up, _Tp>&)'
+  267 |     get(pair<_Up, _Tp>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:267:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp& std::get(std::pair<_Up, _Tp>&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:272:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_Up, _Tp>&)'
+  272 |     get(const pair<_Up, _Tp>& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:272:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp& std::get(const std::pair<_Up, _Tp>&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:277:5: note: candidate: 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_Up, _Tp>&&)'
+  277 |     get(pair<_Up, _Tp>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:277:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr _Tp&& std::get(std::pair<_Up, _Tp>&&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/utility:282:5: note: candidate: 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_Up, _Tp>&&)'
+  282 |     get(const pair<_Up, _Tp>&& __p) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/utility:282:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class _Up> constexpr const _Tp&& std::get(const std::pair<_Up, _Tp>&&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:361:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr _Tp& std::get(std::array<_Tp, _Nm>&)'
+  361 |     get(array<_Tp, _Nm>& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:361:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::array<_Tp, _Nm>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:369:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr _Tp&& std::get(std::array<_Tp, _Nm>&&)'
+  369 |     get(array<_Tp, _Nm>&& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:369:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'std::array<_Tp, _Nm>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:377:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr const _Tp& std::get(const std::array<_Tp, _Nm>&)'
+  377 |     get(const array<_Tp, _Nm>& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:377:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::array<_Tp, _Nm>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:385:5: note: candidate: 'template<long unsigned int _Int, class _Tp, long unsigned int _Nm> constexpr const _Tp&& std::get(const std::array<_Tp, _Nm>&&)'
+  385 |     get(const array<_Tp, _Nm>&& __arr) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/array:385:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: note:   '__gnu_cxx::__alloc_traits<std::allocator<std::tuple<std::pair<long long int, long long int>, long long int> >, std::tuple<std::pair<long long int, long long int>, long long int> >::value_type' {aka 'std::tuple<std::pair<long long int, long long int>, long long int>'} is not derived from 'const std::array<_Tp, _Nm>'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1393:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >& std::get(std::tuple<_UTypes ...>&)'
+ 1393 |     get(tuple<_Elements...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1393:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/tuple:1399:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >& std::get(const std::tuple<_UTypes ...>&)'
+ 1399 |     get(const tuple<_Elements...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1399:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/tuple:1405:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >&& std::get(std::tuple<_UTypes ...>&&)'
+ 1405 |     get(tuple<_Elements...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1405:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/tuple:1414:5: note: candidate: 'template<long unsigned int __i, class ... _Elements> constexpr std::__tuple_element_t<__i, std::tuple<_UTypes ...> >&& std::get(const std::tuple<_UTypes ...>&&)'
+ 1414 |     get(const tuple<_Elements...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1414:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/tuple:1449:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr _Tp& std::get(std::tuple<_UTypes ...>&)'
+ 1449 |     get(tuple<_Types...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1449:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr _Tp& std::get(std::tuple<_UTypes ...>&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1460:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr _Tp&& std::get(std::tuple<_UTypes ...>&&)'
+ 1460 |     get(tuple<_Types...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1460:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr _Tp&& std::get(std::tuple<_UTypes ...>&&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1471:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr const _Tp& std::get(const std::tuple<_UTypes ...>&)'
+ 1471 |     get(const tuple<_Types...>& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1471:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr const _Tp& std::get(const std::tuple<_UTypes ...>&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1483:5: note: candidate: 'template<class _Tp, class ... _Types> constexpr const _Tp&& std::get(const std::tuple<_UTypes ...>&&)'
+ 1483 |     get(const tuple<_Types...>&& __t) noexcept
+      |     ^~~
+/usr/local/include/c++/11.4.0/tuple:1483:5: note:   template argument deduction/substitution failed:
+main.cpp:198:35: error: type/value mismatch at argument 1 in template parameter list for 'template<class _Tp, class ... _Types> constexpr const _Tp&& std::get(const std::tuple<_UTypes ...>&&)'
+  198 |         const ll distance = get<2>(stakes[i]);
+      |                             ~~~~~~^~~~~~~~~~~
+main.cpp:198:35: note:   expected a type, got '2'
+main.cpp:206:30: error: no match for 'operator=' (operand types are 'Point' and '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'})
+  206 |             a = points.front();
+      |                              ^
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(const Point&)'
+   67 | struct Point
+      |        ^~~~~
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'const Point&'
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(Point&&)'
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'Point&&'
+main.cpp:207:30: error: no match for 'operator=' (operand types are 'Point' and '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'})
+  207 |             b = points.front();
+      |                              ^
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(const Point&)'
+   67 | struct Point
+      |        ^~~~~
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'const Point&'
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(Point&&)'
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'Point&&'
+main.cpp:211:29: error: no match for 'operator=' (operand types are 'Point' and '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'})
+  211 |             a = points[i - 1];
+      |                             ^
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(const Point&)'
+   67 | struct Point
+      |        ^~~~~
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'const Point&'
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(Point&&)'
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'Point&&'
+main.cpp:212:29: error: no match for 'operator=' (operand types are 'Point' and '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'})
+  212 |             b = points[i + 1];
+      |                             ^
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(const Point&)'
+   67 | struct Point
+      |        ^~~~~
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'const Point&'
+main.cpp:67:8: note: candidate: 'constexpr Point& Point::operator=(Point&&)'
+main.cpp:67:8: note:   no known conversion for argument 1 from '__gnu_cxx::__alloc_traits<std::allocator<std::pair<long long int, long long int> >, std::pair<long long int, long long int> >::value_type' {aka 'std::pair<long long int, long long int>'} to 'Point&&'
+main.cpp:232:34: error: 'outside_triangle' cannot be used as a function
+  232 |             if (!outside_triangle(tr, p, a, b))
+      |                  ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+main.cpp:237:17: error: 'diagonal_left' was not declared in this scope; did you mean 'diagonal_left_'?
+  237 |                 diagonal_left
+      |                 ^~~~~~~~~~~~~
+      |                 diagonal_left_
+main.cpp:237:30: error: expected '}' at end of input
+  237 |                 diagonal_left
+      |                              ^
+main.cpp:233:13: note: to match this '{'
+  233 |             {
+      |             ^
+main.cpp:237:30: error: expected '}' at end of input
+  237 |                 diagonal_left
+      |                              ^
+main.cpp:231:9: note: to match this '{'
+  231 |         {
+      |         ^
+main.cpp:237:30: error: expected '}' at end of input
+  237 |                 diagonal_left
+      |                              ^
+main.cpp:196:5: note: to match this '{'
+  196 |     {
+      |     ^
+main.cpp:237:30: error: expected '}' at end of input
+  237 |                 diagonal_left
+      |                              ^
+main.cpp:135:1: note: to match this '{'
+  135 | {
+      | ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <cstdio>
+#include <limits>
+#include <cmath>
+#include <vector>
+#include <set>
+
+typedef long long INT64;
+typedef unsigned int UINT32;
+
+const double EPSILON = 1e-9;
+
+struct POINT {
+   INT64 x, y;
+
+   POINT() {}
+   POINT(INT64 _x, INT64 _y): x(_x), y(_y) {}
+
+   bool operator== (const POINT rhs) const {
+      return fabs(x - rhs.x) <= EPSILON && fabs(y - rhs.y) <= EPSILON;
+   }
+
+   double cross(const POINT& rhs) const {
+      return x * rhs.y - y * rhs.x;
+   }
+};
+
+struct SEGMENT {
+   POINT a, b;
+
+   SEGMENT() {}
+   SEGMENT(const POINT& _a, const POINT& _b): a(_a), b(_b) {}
+
+   POINT to_vector() const {
+      return POINT(b.x - a.x, b.y - a.y);
+   }
+};
+
+int n;
+std::vector<POINT> v;
+std::vector<std::vector<POINT> > convex_hull;
+std::set<std::pair<double, POINT> > h;
+
+double signed_area() {
+   double area = 0;
+   for (UINT32 i = 0; i < convex_hull.size(); ++i) {
+      UINT32 next = (i + 1) % convex_hull.size();
+      area += convex_hull[i].cross(convex_hull[next]);
+   }
+   return area / 2.0;
+}
+
+void precompute_convex_hull() {
+   convex_hull.clear();
+   for (UINT32 i = 0; i < v.size(); ++i) {
+      std::vector<POINT> ch;
+      UINT32 k = convex_hull.size();
+      for (UINT32 j = 0; j < k; ++j) {
+         while(convex_hull.size() >= 2) {
+            SEGMENT s1(convex_hull.back(), v[i]);
+            SEGMENT s2(convex_hull[convex_hull.size() - 2], convex_hull.back());
+            if (s1.to_vector().cross(s2.to_vector()) <= EPSILON) {
+               convex_hull.pop_back();
+            }
+            else {
+               break;
+            }
+         }
+         convex_hull.push_back(v[i]);
+      }
+   }
+
+   h.clear();
+   for (UINT32 i = 0; i < convex_hull.size(); ++i) {
+      UINT32 next = (i + 1) % convex_hull.size();
+      POINT vec = convex_hull[next] - convex_hull[i];
+      double angle = atan2(vec.y, vec.x);
+      h.insert(std::make_pair(angle, convex_hull[i]));
+   }
+}
+
+double get_answer() {
+   double answer = signed_area();
+
+   std::set<std::pair<double, POINT> >::iterator sit, eit;
+   eit = h.end();
+   double min_area = 1e18;
+   INT64 to_be_removed = 0;
+   for (UINT32 i = 0; i < v.size(); ++i) {
+      POINT p = v[i];
+
+      for (sit = h.lower_bound(std::make_pair(-M_PI + EPSILON, p)); sit != eit; ++sit) {
+         UINT32 next_convex = (convex_hull.size() + sit - h.begin()) % convex_hull.size();
+         POINT j = convex_hull[next_convex];
+         SEGMENT s(p, j);
+         POINT k;
+         for (UINT32 j = 0; j < convex_hull.size(); ++j) {
+            k = convex_hull[j];
+            if (s.to_vector().cross(SEGMENT(p, k).to_vector()) >= EPSILON) {
+               break;
+            }
+         }
+         double area = 0;
+         for (UINT32 l = 0; l < convex_hull.size(); ++l) {
+            UINT32 next = (l + 1) % convex_hull.size();
+            if ((p != convex_hull[l]) && (j != convex_hull[next]) && (k != convex_hull[next])) {
+               area += POINT(convex_hull[next] - convex_hull[l]).cross(p - convex_hull[l]);
+            }
+         }
+         area = fabs(area);
+         area /= 2.0;
+         if (min_area > area) {
+            min_area = area;
+            eit = sit;
+            to_be_removed = i + 1;
+         }
+      }
+   }
+
+   if (to_be_removed != 0) {
+      answer += min_area;
+      v.erase(v.begin() + (to_be_removed - 1));
+      precompute_convex_hull();
+   }
+
+   return answer;
+}
+
+int main() {
+   std::ifstream in("mosia.in");
+   std::ofstream out("mosia.out");
+   in >> n;
+   v.resize(n + 1);
+   for (UINT32 i = 0; i < n; ++i) {
+      in >> v[i].x >> v[i].y;
+   }
+   precompute_convex_hull();
+   out.precision(4);
+   out.setf(std::ios::fixed, std::ios::floatfield);
+   out << get_answer() << '\n';
+   return 0;
+}
+```

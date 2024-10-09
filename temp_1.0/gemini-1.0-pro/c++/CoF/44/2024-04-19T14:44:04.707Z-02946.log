@@ -1,0 +1,1105 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `pm.in` and write to `pm.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+La o firmă de software se lucrează la un mare proiect. Proiectul constă în executarea a $n$ ($n \in \N$) faze de dezvoltare, numerotate cu numerele $1, 2, ..., n$. Unele faze pot fi executate în paralel (în acelaşi timp), însă executarea altor faze nu poate fi începută până când nu se finalizează executarea anumitor faze.
+
+# Cerinţă
+Să se scrie un program care să se determine:
+a) timpul minim $t$ în care se poate finaliza executarea proiectului
+b) pentru fiecare fază $k$ ($k \in \{1, 2, ..., n\}$), momentul de timp $c_k$ la care poate începe faza $k$ cel mai devreme, respectiv momentul de timp $d_k$ la care poate începe faza $k$ cel mai târziu, fără a influenţa durata totală de executare a proiectului.
+
+# Date de intrare
+Fişierul de intrare `pm.in`  conţine:
+- pe prima linie, un număr natural $n$, reprezentând numărul fazelor proiectului
+- pe a doua linie, $n$ numere naturale, separate prin câte un spaţiu, reprezentând timpul necesar finalizării fiecărei faze  
+- pe fiecare linie $k$ dintre următoarele $n$ linii, un număr natural $m_k$ şi un şir $a$ format din $m_k$ numere naturale: $a_1, a_2, ..., a_{m_k}$, cele $m_{k+1}$ numere din linie fiind separate prin câte un spaţiu, $m_k$ reprezentând numărul de faze ce trebuie finalizate înaintea începerii fazei $k$, iar numerele din şirul $a$ reprezentând numerele de ordine ale fazelor ce trebuie finalizate înaintea începerii fazei $k$. 
+
+# Date de ieşire
+Fişierul de ieşire `pm.out` va conţine $n + 1$ linii. Pe prima linie se va scrie numărul natural $t$, iar pe fiecare linie $k$ dintre următoarele $n$ linii, se vor scrie cele două numere naturale $c_k$ şi $d_k$, separate prin câte un spaţiu. 
+
+# Restricţii şi precizări
+* $0 ≤ n ≤ 100$; $n \in \N$
+* Timpul necesar finalizării executării oricărei faze nu va depăşi $1\ 000\ 000$
+* Se consideră că executarea proiectului începe la momentul de timp $0$
+* Nu vor exista dependenţe circulare (proiectul întotdeauna se poate finaliza)
+* Pentru rezolvarea cerinţei a) se acordă $40%$ din punctaj, iar pentru cerinţa b) $30%$ pentru prima valoare respectiv $30%$ din punctaj pentru a doua valoare.
+
+---
+
+Example:
+`pm.in`
+```
+7
+2 3 5 3 3 3 2
+0
+0
+1 2
+1 1
+1 1
+3 3 4 5
+1 3
+```
+
+`pm.out`
+```
+11
+0 3
+0 0
+3 3 
+2 5
+2 5
+8 8
+8 9
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << earliestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In lambda function:
+main.cpp:47:34: error: 'graph' is not captured
+   47 |         for (const auto &[u, w]: graph[vertex]) {
+      |                                  ^~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:22:11: note: 'Graph graph' declared here
+   22 |     Graph graph(n);
+      |           ^~~~~
+main.cpp:51:21: error: 'criticalPathFinder' is not captured
+   51 |                     criticalPathFinder(u);
+      |                     ^~~~~~~~~~~~~~~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:44:25: note: 'std::function<void(int)> criticalPathFinder' declared here
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                         ^~~~~~~~~~~~~~~~~~
+main.cpp:55:9: error: 'topoSort' is not captured
+   55 |         topoSort.push_back(vertex);
+      |         ^~~~~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:41:17: note: 'std::vector<int> topoSort' declared here
+   41 |     vector<int> topoSort;
+      |                 ^~~~~~~~
+main.cpp:56:9: error: 'topoSortInv' is not captured
+   56 |         topoSortInv.insert(topoSortInv.begin(), vertex);
+      |         ^~~~~~~~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:42:17: note: 'std::vector<int> topoSortInv' declared here
+   42 |     vector<int> topoSortInv;
+      |                 ^~~~~~~~~~~
+main.cpp:56:28: error: 'topoSortInv' is not captured
+   56 |         topoSortInv.insert(topoSortInv.begin(), vertex);
+      |                            ^~~~~~~~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:42:17: note: 'std::vector<int> topoSortInv' declared here
+   42 |     vector<int> topoSortInv;
+      |                 ^~~~~~~~~~~
+main.cpp:57:34: error: 'reversedGraph' is not captured
+   57 |         for (const auto &[u, w]: reversedGraph[vertex]) {
+      |                                  ^~~~~~~~~~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:23:11: note: 'Graph reversedGraph' declared here
+   23 |     Graph reversedGraph(n);
+      |           ^~~~~~~~~~~~~
+main.cpp:60:17: error: 'criticalPathFinder' is not captured
+   60 |                 criticalPathFinder(u);
+      |                 ^~~~~~~~~~~~~~~~~~
+main.cpp:44:88: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                        ^
+main.cpp:44:25: note: 'std::function<void(int)> criticalPathFinder' declared here
+   44 |     function<void(int)> criticalPathFinder = [&distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                         ^~~~~~~~~~~~~~~~~~
+main.cpp: In function 'int main()':
+main.cpp:84:20: error: 'earliestFinishTime' was not declared in this scope; did you mean 'latestFinishTime'?
+   84 |             out << earliestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+      |                    ^~~~~~~~~~~~~~~~~~
+      |                    latestFinishTime
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The fix is to capture the necessary variables in the lambda function. Here is the fixed code:
+```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << latestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In lambda function:
+main.cpp:51:21: error: 'criticalPathFinder' is not captured
+   51 |                     criticalPathFinder(u);
+      |                     ^~~~~~~~~~~~~~~~~~
+main.cpp:44:112: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                                                ^
+main.cpp:44:25: note: 'std::function<void(int)> criticalPathFinder' declared here
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                         ^~~~~~~~~~~~~~~~~~
+main.cpp:55:9: error: 'topoSort' is not captured
+   55 |         topoSort.push_back(vertex);
+      |         ^~~~~~~~
+main.cpp:44:112: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                                                ^
+main.cpp:41:17: note: 'std::vector<int> topoSort' declared here
+   41 |     vector<int> topoSort;
+      |                 ^~~~~~~~
+main.cpp:56:9: error: 'topoSortInv' is not captured
+   56 |         topoSortInv.insert(topoSortInv.begin(), vertex);
+      |         ^~~~~~~~~~~
+main.cpp:44:112: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                                                ^
+main.cpp:42:17: note: 'std::vector<int> topoSortInv' declared here
+   42 |     vector<int> topoSortInv;
+      |                 ^~~~~~~~~~~
+main.cpp:56:28: error: 'topoSortInv' is not captured
+   56 |         topoSortInv.insert(topoSortInv.begin(), vertex);
+      |                            ^~~~~~~~~~~
+main.cpp:44:112: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                                                ^
+main.cpp:42:17: note: 'std::vector<int> topoSortInv' declared here
+   42 |     vector<int> topoSortInv;
+      |                 ^~~~~~~~~~~
+main.cpp:60:17: error: 'criticalPathFinder' is not captured
+   60 |                 criticalPathFinder(u);
+      |                 ^~~~~~~~~~~~~~~~~~
+main.cpp:44:112: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                                                                                                                ^
+main.cpp:44:25: note: 'std::function<void(int)> criticalPathFinder' declared here
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &out, &visited](int vertex) -> void {
+      |                         ^~~~~~~~~~~~~~~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The fix is to add `&criticalPathFinder` to the capture list of the lambda function. Here is the fixed code:
+```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << latestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In lambda function:
+main.cpp:55:9: error: 'topoSort' is not captured
+   55 |         topoSort.push_back(vertex);
+      |         ^~~~~~~~
+main.cpp:44:133: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &out, &visited](int vertex) -> void {
+      |                                                                                                                                     ^
+main.cpp:41:17: note: 'std::vector<int> topoSort' declared here
+   41 |     vector<int> topoSort;
+      |                 ^~~~~~~~
+main.cpp:56:9: error: 'topoSortInv' is not captured
+   56 |         topoSortInv.insert(topoSortInv.begin(), vertex);
+      |         ^~~~~~~~~~~
+main.cpp:44:133: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &out, &visited](int vertex) -> void {
+      |                                                                                                                                     ^
+main.cpp:42:17: note: 'std::vector<int> topoSortInv' declared here
+   42 |     vector<int> topoSortInv;
+      |                 ^~~~~~~~~~~
+main.cpp:56:28: error: 'topoSortInv' is not captured
+   56 |         topoSortInv.insert(topoSortInv.begin(), vertex);
+      |                            ^~~~~~~~~~~
+main.cpp:44:133: note: the lambda has no capture-default
+   44 |     function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &out, &visited](int vertex) -> void {
+      |                                                                                                                                     ^
+main.cpp:42:17: note: 'std::vector<int> topoSortInv' declared here
+   42 |     vector<int> topoSortInv;
+      |                 ^~~~~~~~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The fix is to add `&topoSort` and `&topoSortInv` to the capture list of the lambda function. Here is the fixed code:
+```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &topoSort, &topoSortInv, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << latestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+7
+2 3 5 3 3 3 2
+0
+0
+1 2
+1 1
+1 1
+3 3 4 5
+1 3
+```
+Expected output:
+```
+11
+0 3
+0 0
+3 3 
+2 5
+2 5
+8 8
+8 9
+```
+Found output:
+```
+9
+0 0
+6 6
+1 1
+3 3
+3 3
+6 6
+7 7
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The bug in the code is in the following line:
+```c++
+        if (distances[u] == distances[source] - w) {
+```
+It should be:
+```c++
+            if (distances[u] == distances[source] - w && w != 0) {
+```
+Here is the fixed code:
+```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &topoSort, &topoSortInv, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w && w != 0) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w && w != 0) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << latestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+7
+2 3 5 3 3 3 2
+0
+0
+1 2
+1 1
+1 1
+3 3 4 5
+1 3
+```
+Expected output:
+```
+11
+0 3
+0 0
+3 3 
+2 5
+2 5
+8 8
+8 9
+```
+Found output:
+```
+9
+0 0
+6 6
+1 1
+3 3
+3 3
+6 6
+7 7
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The bug in the code is in the following line:
+```c++
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w && w != 0) {
+```
+It should be:
+```c++
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w) {
+```
+Here is the fixed code:
+```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &topoSort, &topoSortInv, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << latestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```
+---------- user ----------
+
+
+Program result did not match expected result.
+Input data:
+```
+7
+2 3 5 3 3 3 2
+0
+0
+1 2
+1 1
+1 1
+3 3 4 5
+1 3
+```
+Expected output:
+```
+11
+0 3
+0 0
+3 3 
+2 5
+2 5
+8 8
+8 9
+```
+Found output:
+```
+9
+0 0
+6 6
+1 1
+3 3
+3 3
+6 6
+7 7
+```
+
+Evaluate the differences between the expected and found result.
+Write a comprehensive explanation of why the results differ.
+If the solution has a bug fix it, else reimplement it using a different algorithm or data structure.
+
+Rewrite the solution.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The issue with the code is that when calculating the latest finish time of a task, it considers all edges coming from that task, while it should only consider the edges that are in the critical path.
+Here is the corrected version of the code:
+```c++
+#include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <limits>
+
+using namespace std;
+
+struct Edge{
+    int to, weight;
+};
+
+using Graph = unordered_map<int, vector<Edge>>;
+
+int main() {
+    ifstream in("pm.in");
+    ofstream out("pm.out");
+    int n;
+    in >> n;
+    vector<int> times(n);
+    for (int &time: times) in >> time;
+    Graph graph(n);
+    Graph reversedGraph(n);
+    vector<int> verticesInDegree(n);
+    vector<int> verticesOutDegree(n);
+    for (int source = 0; source < n; ++source) {
+        int dependenciesCount;
+        in >> dependenciesCount;
+        for (int dest = 0; dest < dependenciesCount; ++dest) {
+            int dependency;
+            in >> dependency;
+            --dependency;
+            ++verticesInDegree[source];
+            graph[source].push_back({dependency, times[source]});
+            reversedGraph[dependency].push_back({source, times[source]});
+            ++verticesOutDegree[dependency];
+        }
+    }
+    vector<int> distances(n);
+    vector<int> criticalPath;
+    vector<int> topoSort;
+    vector<int> topoSortInv;
+    vector<bool> visited(n);
+    function<void(int)> criticalPathFinder = [&graph, &reversedGraph, &distances, &criticalPath, &criticalPathFinder, &topoSort, &topoSortInv, &out, &visited](int vertex) -> void {
+        if (visited[vertex]) return;
+        visited[vertex] = true;
+        for (const auto &[u, w]: graph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                if (vertex == 0) {
+                    criticalPathFinder(u);
+                }
+            }
+        }
+        topoSort.push_back(vertex);
+        topoSortInv.insert(topoSortInv.begin(), vertex);
+        for (const auto &[u, w]: reversedGraph[vertex]) {
+            if (distances[u] < distances[vertex] + w) {
+                distances[u] = distances[vertex] + w;
+                criticalPathFinder(u);
+            }
+        }
+        criticalPath.push_back(vertex);
+    };
+    criticalPathFinder(0);
+    for (int s: criticalPath) {
+        if (!visited[s])
+            criticalPathFinder(s);
+    }
+    int latestFinishTime = *max_element(distances.begin(), distances.end());
+    out << latestFinishTime << endl;
+    for (int source = 0; source < n; ++source) {
+        int earliestStartTime = numeric_limits<int>::max();
+        int latestStartTime = -1;
+        for (const auto &[u, w]: reversedGraph[source]) {
+            if (distances[u] == distances[source] - w && binary_search(criticalPath.begin(), criticalPath.end(), u)) {
+                earliestStartTime = min(earliestStartTime, distances[u] - times[source]);
+                latestStartTime = max(latestStartTime, distances[u] - times[source]);
+            }
+        }
+        if (source == 0) {
+            out << "0 0" << endl;
+        } else if (earliestStartTime == numeric_limits<int>::max()) {
+            out << latestFinishTime - times[source] << " " << latestFinishTime - times[source] << endl;
+        }else if (latestStartTime - earliestStartTime == 0) {
+            out << earliestStartTime << " " << earliestStartTime << endl;
+        } else if (verticesInDegree[source] == 0) {
+            out << latestStartTime << " " << latestStartTime << endl;
+        } else {
+            out << earliestStartTime << " " << latestStartTime << endl;
+        }
+    }
+    return 0;
+}
+```

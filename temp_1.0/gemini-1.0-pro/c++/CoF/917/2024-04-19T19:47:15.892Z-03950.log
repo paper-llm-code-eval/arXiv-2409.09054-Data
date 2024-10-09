@@ -1,0 +1,638 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `cetate.in` and write to `cetate.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Cetatea Vizima din regatul Temeria poate fi reprezentată printr-o matrice cu $N$ linii și $M$ coloane, numerotate începând cu $1$. Vizima este o cetate înfloritoare, fapt datorat numărului mare de negustori și meșteri prezenți. Din acest motiv, fiecărei celule îi este atribuit un profit corespunzător zonei respective. Regele Foltest dorește să reconstruiască zidurile cetății, dar cum războiul cu Imperiul Nilfgaard bate la ușă și resursele regatului sunt limitate, el trebuie să aleagă o porțiune pe care să o poată apăra, reprezentată ca o submatrice. O submatrice este identificată printr-o **configurație** de patru numere $(i_1, j_1, i_2, j_2)$ ($1 \leq i_1 \leq i_2 \leq N$, $1 \leq j_1 \leq j_2 \leq M$), în această ordine, și este formată din elementele situate pe liniile consecutive $i_1, i_1+1, \ldots, i_2$ și pe coloanele consecutive $j_1, j_1+1, \ldots, j_2$ ale matricei prin care este reprezentată cetatea. **Laturile** submatricei sunt egale cu numărul de linii, respectiv de coloane din care a preluat elemente, iar **profitul** submatricei este suma valorilor din celulele sale.
+
+# Cerințe
+Scrieți un program care, cunoscând matricea cetății și o valoare $K$, determină:
+1) profitul maxim al unei submatrice cu laturile egale cu $K$, precum și configurația prin care se identifică ea.
+2) profitul maxim al unei submatrice cu laturile cel mult egale cu $K$, precum și configurația prin care se identifică ea.
+
+# Date de intrare
+Fișierul de intrare `cetate.in` conține pe primul rând o valoare $c$ egală cu $1$ sau $2$, reprezentând cerința ce urmează a fi rezolvată. Următoarea linie conține în ordine $N$, $M$ și $K$, cu semnificația din enunț, iar pe următoarele $N$ linii se află câte $M$ numere, reprezentând valorile din matricea dată. Numerele aflate pe aceeași linie a fișierului sunt separate prin câte un spațiu.
+
+# Date de ieșire
+Fișierul de ieșire `cetate.out` va conține pe prima linie profitul maxim cerut, conform cerinței, iar pe a doua linie va conține 4 numere naturale, reprezentând configurația prin care se identifică submatricea obținută. Dacă există mai multe submatrice conform cerinței, se va lua în considerare cea pentru care configurația formată din cele 4 numere de mai sus este minim lexicografică.
+
+# Restricții și precizări
+- $1 \leq N,M \leq 400$
+- $1 \leq K \leq min(N,M)$
+- Valorile date pentru matricea cetății se află în intervalul $[-10^9, 10^9]$.
+- Pentru teste în valoare de 20 de puncte, $c=1$, iar pentru restul testelor, în valoare de 70 de puncte, $c=2$. Pentru teste în valoare de 8 puncte, $c=1$ și $1 \leq N,M \leq 70$. Pentru teste în valoare de 25 de puncte, $c=2$ și $1 \leq N,M \leq 70$.
+- Configurația $(x_1, x_2, x_3, x_4)$ este mai mică din punct de vedere lexicografic decât configurația $(y_1, y_2, y_3, y_4)$ dacă există $p$ astfel încât $x_p < y_p$ și $x_1 = y_1$, $x_2 = y_2$, $\dots$, $x_{p-1} = y_{p-1}$.
+
+---
+
+Example:
+`cetate.in`
+```
+1
+3 4 3
+-1 -1 -1 -1
+-1 2 -1 -1
+-1 -1 -1 -1
+```
+
+`cetate.out`
+```
+-6
+1 1 3 3
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <algorithm>
+#include <bitset>
+#include <fstream>
+#include <vector>
+
+using namespace std;
+
+const int MAXN = 405, MAXK = 405;
+typedef long long ll;
+ifstream in("cetate.in");
+ofstream out("cetate.out");
+ll dp[MAXN][MAXN][MAXK][MAXK];  // dp[i][j][wl][wc] = profitul maxim al unei submatrice care incepe in (i, j) si are laturile (wl, wc)
+ll mat[MAXN][MAXN];
+int n, m, k;
+
+ll max_along_column(int st, int dr, int col) {
+    ll sum = 0;
+    for (int i = st; i <= dr; ++i) {
+        sum += mat[i][col];
+    }
+    return sum;
+}
+
+vector<ll> sums_k_rows(int x1, int x2, int y) {
+    vector<ll> a;
+    for (int i = x1; i <= x2; ++i) {
+        a.push_back(max_along_column(x1, x2, i));
+    }
+    return a;
+}
+
+vector<ll> sums_k_cols(int y1, int y2, int x) {
+    vector<ll> a;
+    for (int i = y1; i <= y2; ++i) {
+        a.push_back(mat[x][i]);
+    }
+    return a;
+}
+
+ll brute(int x1, int x2, int y1, int y2) {  // v[i][j] := cel mai mare dreptunghi de laturi wl <= i si wc <= j care se poate incadra intre x1 si x2
+    ll ans = 0;
+    for (int h = 1; h <= x2 - x1 + 1; ++h) {
+        for (int w = 1; w <= y2 - y1 + 1; ++w) {
+            ll sum = 0;
+            for (int i = x1; i <= x2; ++i) {
+                for (int j = y1; j <= y2; ++j) {
+                    if (i + h - 1 <= x2 && j + w - 1 <= y2) { sum += mat[i + h - 1][j + w - 1]; }
+                }
+            }
+            ans = max(ans, sum);
+        }
+    }
+    return ans;
+}
+
+int main() {
+    in >> k >> n >> m;
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            in >> mat[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            dp[i][j][1][1] = mat[i][j];
+            if (i > 1) { dp[i][j][1][1] = max(dp[i][j][1][1], dp[i - 1][j][1][1]); }
+            if (j > 1) { dp[i][j][1][1] = max(dp[i][j][1][1], dp[i][j - 1][1][1]); }
+        }
+    }
+    for (int l = 1; l <= k; ++l) {
+        for (int h = l; h <= n; ++h) {
+            for (int w = l; w <= m; ++w) {
+                for (int x = 1; x <= h - l + 1; ++x) {
+                    vector<ll> v = sums_k_cols(w - l + 1, w, x);
+                    vector<ll> pref(h - l + 2, 0);
+                    pref[0] = v[0];
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        pref[i] = pref[i - 1] + v[i - 1];
+                    }
+                    ll ans = dp[x - 1][w][l][l - 1];
+                    if (x - l > 0) { ans = max(ans, dp[x - 1][w][l][l]); }
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        ans = max(ans, dp[x - 1][w][l - 1][i - 1] + pref[i - 1] + max_along_column(x, x + l - 1, w));
+                        if (x - l >= 1) {
+                            ans = max(ans, dp[x - 1][w][l][i - 1] + pref[i - 1] + max_along_column(x, x + l - 1, w - l + 1));
+                        }
+                    }
+                    dp[x][w][l][l] = ans;
+                }
+                for (int x = 1; x <= w - l + 1; ++x) {
+                    vector<ll> v = sums_k_rows(h - l + 1, h, x);
+                    vector<ll> pref(h - l + 2, 0);
+                    pref[0] = v[0];
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        pref[i] = pref[i - 1] + v[i - 1];
+                    }
+                    ll ans = dp[h][x - 1][l - 1][l];
+                    if (x - l > 0) { ans = max(ans, dp[h][x - 1][l][l]); }
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        ans = max(ans, dp[h][x - 1][i - 1][l - 1] + pref[i - 1] + max_along_column(h, h - l + 1, x));
+                        if (x - l >= 1) {
+                            ans = max(ans, dp[h][x - 1][i - 1][l] + pref[i - 1] + max_along_column(h - l + 1, h, x - l + 1));
+                        }
+                    }
+                    dp[h][x][l][l] = ans;
+                }
+            }
+        }
+    }
+
+    ll ans = 0;
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            for (int l = 1; l <= k; ++l) {
+                for (int h = 1; h <= k; ++h) {
+                    ll aux = dp[i][j][l][h];
+                    if ((l == 1 && h == 1) && (i > 1)) { aux = max(aux, dp[i - 1][j][1][1]); }
+                    if ((l == 1 && h == 1) && (j > 1)) { aux = max(aux, dp[i][j - 1][1][1]); }
+                    if (l > 1) { aux = max(aux, dp[i][j][l - 1][h]); }
+                    if (h > 1) { aux = max(aux, dp[i][j][l][h - 1]); }
+                    ans = max(ans, aux);
+                }
+            }
+        }
+    }
+
+    if (k == 1) { out << brute(1, n, 1, m) << '\n'; } else { out << ans << '\n'; }
+    ans = 0;
+    int l_ans = 1, c_ans = 1, l = 1, c = 1;
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            for (int l = 1; l <= k; ++l) {
+                for (int h = 1; h <= k; ++h) {
+                    ll aux = dp[i][j][l][h];
+                    if ((l == 1 && h == 1) && (i > 1)) { aux = max(aux, dp[i - 1][j][1][1]); }
+                    if ((l == 1 && h == 1) && (
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <algorithm>
+#include <bitset>
+#include <fstream>
+#include <vector>
+
+using namespace std;
+
+const int MAXN = 405, MAXK = 405;
+typedef long long ll;
+ifstream in("cetate.in");
+ofstream out("cetate.out");
+ll dp[MAXN][MAXN][MAXK][MAXK];  // dp[i][j][wl][wc] = profitul maxim al unei submatrice care incepe in (i, j) si are laturile (wl, wc)
+ll mat[MAXN][MAXN];
+int n, m, k;
+
+ll max_along_column(int st, int dr, int col) {
+    ll sum = 0;
+    for (int i = st; i <= dr; ++i) {
+        sum += mat[i][col];
+    }
+    return sum;
+}
+
+vector<ll> sums_k_rows(int x1, int x2, int y) {
+    vector<ll> a;
+    for (int i = x1; i <= x2; ++i) {
+        a.push_back(max_along_column(x1, x2, i));
+    }
+    return a;
+}
+
+vector<ll> sums_k_cols(int y1, int y2, int x) {
+    vector<ll> a;
+    for (int i = y1; i <= y2; ++i) {
+        a.push_back(mat[x][i]);
+    }
+    return a;
+}
+
+ll brute(int x1, int x2, int y1, int y2) {  // v[i][j] := cel mai mare dreptunghi de laturi wl <= i si wc <= j care se poate incadra intre x1 si x2
+    ll ans = 0;
+    for (int h = 1; h <= x2 - x1 + 1; ++h) {
+        for (int w = 1; w <= y2 - y1 + 1; ++w) {
+            ll sum = 0;
+            for (int i = x1; i <= x2; ++i) {
+                for (int j = y1; j <= y2; ++j) {
+                    if (i + h - 1 <= x2 && j + w - 1 <= y2) { sum += mat[i + h - 1][j + w - 1]; }
+                }
+            }
+            ans = max(ans, sum);
+        }
+    }
+    return ans;
+}
+
+int main() {
+    in >> k >> n >> m;
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            in >> mat[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            dp[i][j][1][1] = mat[i][j];
+            if (i > 1) { dp[i][j][1][1] = max(dp[i][j][1][1], dp[i - 1][j][1][1]); }
+            if (j > 1) { dp[i][j][1][1] = max(dp[i][j][1][1], dp[i][j - 1][1][1]); }
+        }
+    }
+    for (int l = 1; l <= k; ++l) {
+        for (int h = l; h <= n; ++h) {
+            for (int w = l; w <= m; ++w) {
+                for (int x = 1; x <= h - l + 1; ++x) {
+                    vector<ll> v = sums_k_cols(w - l + 1, w, x);
+                    vector<ll> pref(h - l + 2, 0);
+                    pref[0] = v[0];
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        pref[i] = pref[i - 1] + v[i - 1];
+                    }
+                    ll ans = dp[x - 1][w][l][l - 1];
+                    if (x - l > 0) { ans = max(ans, dp[x - 1][w][l][l]); }
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        ans = max(ans, dp[x - 1][w][l - 1][i - 1] + pref[i - 1] + max_along_column(x, x + l - 1, w));
+                        if (x - l >= 1) {
+                            ans = max(ans, dp[x - 1][w][l][i - 1] + pref[i - 1] + max_along_column(x, x + l - 1, w - l + 1));
+                        }
+                    }
+                    dp[x][w][l][l] = ans;
+                }
+                for (int x = 1; x <= w - l + 1; ++x) {
+                    vector<ll> v = sums_k_rows(h - l + 1, h, x);
+                    vector<ll> pref(h - l + 2, 0);
+                    pref[0] = v[0];
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        pref[i] = pref[i - 1] + v[i - 1];
+                    }
+                    ll ans = dp[h][x - 1][l - 1][l];
+                    if (x - l > 0) { ans = max(ans, dp[h][x - 1][l][l]); }
+                    for (int i = 1; i <= h - l + 1; ++i) {
+                        ans = max(ans, dp[h][x - 1][i - 1][l - 1] + pref[i - 1] + max_along_column(h, h - l + 1, x));
+                        if (x - l >= 1) {
+                            ans = max(ans, dp[h][x - 1][i - 1][l] + pref[i - 1] + max_along_column(h - l + 1, h, x - l + 1));
+                        }
+                    }
+                    dp[h][x][l][l] = ans;
+                }
+            }
+        }
+    }
+
+    ll ans = 0;
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            for (int l = 1; l <= k; ++l) {
+                for (int h = 1; h <= k; ++h) {
+                    ll aux = dp[i][j][l][h];
+                    if ((l == 1 && h == 1) && (i > 1)) { aux = max(aux, dp[i - 1][j][1][1]); }
+                    if ((l == 1 && h == 1) && (j > 1)) { aux = max(aux, dp[i][j - 1][1][1]); }
+                    if (l > 1) { aux = max(aux, dp[i][j][l - 1][h]); }
+                    if (h > 1) { aux = max(aux, dp[i][j][l][h - 1]); }
+                    ans = max(ans, aux);
+                }
+            }
+        }
+    }
+
+    if (k == 1) { out << brute(1, n, 1, m) << '\n'; } else { out << ans << '\n'; }
+    ans = 0;
+    int l_ans = 1, c_ans = 1, l = 1, c = 1;
+    for (int i = 1; i <= n; ++i) {
+        for (int j = 1; j <= m; ++j) {
+            for (int l = 1; l <= k; ++l) {
+                for (int h = 1; h <= k; ++h) {
+                    ll aux = dp[i][j][l][h];
+                    if ((l == 1 && h == 1) && (i > 1)) { aux = max(aux, dp[i - 1][j][1][1]); }
+                    if ((l == 1 && h == 1) && (```c++
+#include <bits/stdc++.h>
+using namespace std;
+
+const int kNMax = 400;
+
+int c;
+int n, m, k;
+int a[kNMax][kNMax];
+
+int sum[kNMax][kNMax];
+
+array<int, 4> ans{-1, -1, -1, -1};
+int max_profit{-1e9};
+array<int, 4> ans_k{-1, -1, -1, -1};
+int max_profit_k{-1e9};
+
+void Read() {
+  ifstream fin("cetate.in");
+  fin >> c >> n >> m >> k;
+  for (int i = 1; i <= n; ++i) {
+    for (int j = 1; j <= m; ++j) {
+      fin >> a[i][j];
+      sum[i][j] = a[i][j];
+    }
+  }
+  fin.close();
+}
+
+void Solve() {
+  for (int i = 1; i <= n; ++i) {
+    for (int j = 1; j <= m; ++j) {
+      sum[i][j] += sum[i - 1][j] + sum[i][j - 1] - sum[i - 1][j - 1];
+    }
+  }
+  for (int ll = 1; ll <= n; ++ll) {
+    for (int rr = ll; rr <= n; ++rr) {
+      for (int lc = 1; lc <= m; ++lc) {
+        for (int rc = lc; rc <= m; ++rc) {
+          int len = min({rr - ll + 1, rc - lc + 1, k});
+          int curr_profit =
+              sum[rr][rc] - sum[rr][lc - 1] - sum[ll - 1][rc] + sum[ll - 1][lc - 1];
+          if (len == k && curr_profit > max_profit) {
+            max_profit = curr_profit;
+            ans = {ll, lc, rr, rc};
+          }
+          if (len <= k && curr_profit > max_profit_k) {
+            max_profit_k = curr_profit;
+            ans_k = {ll, lc, rr, rc};
+          }
+        }
+      }
+    }
+  }
+}
+
+void Write() {
+  ofstream fout("cetate.out");
+  c == 1 ? fout << max_profit << '\n' : fout << max_profit_k << '\n';
+  c == 1 ? fout << ans[0] << ' ' << ans[1] << ' ' << ans[2] << ' ' << ans[3]
+        : fout << ans_k[0] << ' ' << ans_k[1] << ' ' << ans_k[2] << ' '
+              << ans_k[3];
+  fout.close();
+}
+
+int main() {
+  ios_base::sync_with_stdio(false);
+  cin.tie(nullptr);
+  Read();
+  Solve();
+  Write();
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'int main()':
+main.cpp:137:48: error: expected primary-expression at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                                                ^
+main.cpp:137:48: error: expected ')' at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                                               ~^
+      |                                                )
+main.cpp:137:48: error: expected ')' at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                        ~                       ^
+      |                                                )
+main.cpp:137:48: error: expected statement at end of input
+main.cpp:137:48: error: expected '}' at end of input
+main.cpp:134:46: note: to match this '{'
+  134 |                 for (int h = 1; h <= k; ++h) {
+      |                                              ^
+main.cpp:137:48: error: expected '}' at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                                                ^
+main.cpp:133:42: note: to match this '{'
+  133 |             for (int l = 1; l <= k; ++l) {
+      |                                          ^
+main.cpp:137:48: error: expected '}' at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                                                ^
+main.cpp:132:38: note: to match this '{'
+  132 |         for (int j = 1; j <= m; ++j) {
+      |                                      ^
+main.cpp:137:48: error: expected '}' at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                                                ^
+main.cpp:131:34: note: to match this '{'
+  131 |     for (int i = 1; i <= n; ++i) {
+      |                                  ^
+main.cpp:137:48: error: expected '}' at end of input
+  137 |                     if ((l == 1 && h == 1) && (
+      |                                                ^
+main.cpp:56:12: note: to match this '{'
+   56 | int main() {
+      |            ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message is complaining about missing closing curly braces and missing statements at the end of the input.
+Here is the complete fixed source code:
+```c++
+#include <bits/stdc++.h>
+using namespace std;
+
+const int kNMax = 400;
+
+int c;
+int n, m, k;
+int a[kNMax][kNMax];
+
+int sum[kNMax][kNMax];
+
+array<int, 4> ans{-1, -1, -1, -1};
+int max_profit{-1e9};
+array<int, 4> ans_k{-1, -1, -1, -1};
+int max_profit_k{-1e9};
+
+void Read() {
+  ifstream fin("cetate.in");
+  fin >> c >> n >> m >> k;
+  for (int i = 1; i <= n; ++i) {
+    for (int j = 1; j <= m; ++j) {
+      fin >> a[i][j];
+      sum[i][j] = a[i][j];
+    }
+  }
+  fin.close();
+}
+
+void Solve() {
+  for (int i = 1; i <= n; ++i) {
+    for (int j = 1; j <= m; ++j) {
+      sum[i][j] += sum[i - 1][j] + sum[i][j - 1] - sum[i - 1][j - 1];
+    }
+  }
+  for (int ll = 1; ll <= n; ++ll) {
+    for (int rr = ll; rr <= n; ++rr) {
+      for (int lc = 1; lc <= m; ++lc) {
+        for (int rc = lc; rc <= m; ++rc) {
+          int len = min({rr - ll + 1, rc - lc + 1, k});
+          int curr_profit =
+              sum[rr][rc] - sum[rr][lc - 1] - sum[ll - 1][rc] + sum[ll - 1][lc - 1];
+          if (len == k && curr_profit > max_profit) {
+            max_profit = curr_profit;
+            ans = {ll, lc, rr, rc};
+          }
+          if (len <= k && curr_profit > max_profit_k) {
+            max_profit_k = curr_profit;
+            ans_k = {ll, lc, rr, rc};
+          }
+        }
+      }
+    }
+  }
+}
+
+void Write() {
+  ofstream fout("cetate.out");
+  c == 1 ? fout << max_profit << '\n' : fout << max_profit_k << '\n';
+  c == 1 ? fout << ans[0] << ' ' << ans[1] << ' ' << ans[2] << ' ' << ans[3]
+        : fout << ans_k[0] << ' ' << ans_k[1] << ' ' << ans_k[2] << ' '
+              << ans_k[3];
+  fout.close();
+}
+
+int main() {
+  ios_base::sync_with_stdio(false);
+  cin.tie(nullptr);
+  Read();
+  Solve();
+  Write();
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:13:20: error: narrowing conversion of '-1.0e+9' from 'double' to 'int' [-Wnarrowing]
+   13 | int max_profit{-1e9};
+      |                    ^
+main.cpp:15:22: error: narrowing conversion of '-1.0e+9' from 'double' to 'int' [-Wnarrowing]
+   15 | int max_profit_k{-1e9};
+      |                      ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message is complaining about narrowing conversion from double to int. The fix is to change the data type of `max_profit` and `max_profit_k` to `long long`. Here is the complete fixed source code:
+
+```c++
+#include <bits/stdc++.h>
+using namespace std;
+
+const int kNMax = 400;
+
+int c;
+int n, m, k;
+int a[kNMax][kNMax];
+
+int sum[kNMax][kNMax];
+
+array<int, 4> ans{-1, -1, -1, -1};
+long long max_profit = -1e9;
+array<int, 4> ans_k{-1, -1, -1, -1};
+long long max_profit_k = -1e9;
+
+void Read() {
+  ifstream fin("cetate.in");
+  fin >> c >> n >> m >> k;
+  for (int i = 1; i <= n; ++i) {
+    for (int j = 1; j <= m; ++j) {
+      fin >> a[i][j];
+      sum[i][j] = a[i][j];
+    }
+  }
+  fin.close();
+}
+
+void Solve() {
+  for (int i = 1; i <= n; ++i) {
+    for (int j = 1; j <= m; ++j) {
+      sum[i][j] += sum[i - 1][j] + sum[i][j - 1] - sum[i - 1][j - 1];
+    }
+  }
+  for (int ll = 1; ll <= n; ++ll) {
+    for (int rr = ll; rr <= n; ++rr) {
+      for (int lc = 1; lc <= m; ++lc) {
+        for (int rc = lc; rc <= m; ++rc) {
+          int len = min({rr - ll + 1, rc - lc + 1, k});
+          int curr_profit =
+              sum[rr][rc] - sum[rr][lc - 1] - sum[ll - 1][rc] + sum[ll - 1][lc - 1];
+          if (len == k && curr_profit > max_profit) {
+            max_profit = curr_profit;
+            ans = {ll, lc, rr, rc};
+          }
+          if (len <= k && curr_profit > max_profit_k) {
+            max_profit_k = curr_profit;
+            ans_k = {ll, lc, rr, rc};
+          }
+        }
+      }
+    }
+  }
+}
+
+void Write() {
+  ofstream fout("cetate.out");
+  c == 1 ? fout << max_profit << '\n' : fout << max_profit_k << '\n';
+  c == 1 ? fout << ans[0] << ' ' << ans[1] << ' ' << ans[2] << ' ' << ans[3]
+        : fout << ans_k[0] << ' ' << ans_k[1] << ' ' << ans_k[2] << ' '
+              << ans_k[3];
+  fout.close();
+}
+
+int main() {
+  ios_base::sync_with_stdio(false);
+  cin.tie(nullptr);
+  Read();
+  Solve();
+  Write();
+  return 0;
+}
+```

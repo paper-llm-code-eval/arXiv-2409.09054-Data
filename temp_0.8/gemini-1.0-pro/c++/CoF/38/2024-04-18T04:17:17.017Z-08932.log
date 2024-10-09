@@ -1,0 +1,1161 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `parc.in` and write to `parc.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Un parc de formă dreptunghiulară este format din zone pietonale şi piste de biciclete. Reprezentând harta parcului într-un sistem cartezian, cu coordonata colţului stânga-jos `(0,0)`, pistele de biciclete sunt reprezentate prin dungi orizontale sau verticale colorate cu gri, iar zonele pietonale au culoarea albă, ca în figura din dreapta.
+
+Vizitatorii parcului se pot plimba liber pe zonele pietonale în orice direcţie, însă pistele de biciclete se vor traversa, în linie dreaptă,  paralel cu axele. În figura alăturată avem un parc de dimensiuni `10 x 8`, cu piste de biciclete verticale între `2` şi `4` respectiv `5` şi `8`, şi  orizontale între `0` şi `1` respectiv între `2` şi `4`. Gigel se află în punctul `A(1 , 1)` şi poate sa ajungă pe drumul cel mai scurt la prietenul lui, în punctul `B(8 , 7)` deplasându-se astfel: porneşte din punctul `(1, 1)` şi parcurge un traseu format din segmente cu extremităţile în punctele de coordonate `(1.5 , 2) (1.5, 4) (2 , 5) (4 , 5) (5 , 7)` şi în final ajunge în punctul de coordonate `(8 , 7)`. 
+
+Lungimea totală a drumului va fi aproximativ `11.4721359`.
+\
+~[parc.png]
+# Cerinţă
+Cunoscând dimensiunile parcului, coordonatele lui Gigel, coordonatele prietenului lui şi poziţiile pistelor de biciclete, să se calculeze lungimea drumului minim şi numărul drumurilor distincte de lungime minimă.
+
+# Date de intrare
+Fişierul `parc.in` conţine pe prima linie două numere naturale `Xparc` şi `Yparc` separate prin spaţiu, reprezentând dimensiunile parcului în direcţiile `Ox` respectiv `Oy`. Linia a doua va conţine patru numere separate prin spaţiu `xG, yG, xpr` şi `ypr` ce reprezintă coordonatele lui Gigel şi coordonatele prietenului lui. Linia a treia va conţine un număr natural `m`, reprezentând numărul pistelor verticale. Următoarele `m` linii vor conţine perechi de valori de pe axa `Ox` ce delimitează câte o pistă de biciclete verticală. Următoarea linie va conţine un număr natural `n`, reprezentând numărul pistelor orizontale. Următoarele `n` linii vor conţine perechi de valori de pe axa `Oy` ce delimitează câte o pistă de biciclete orizontală.
+
+# Date de ieşire
+Fişierul `parc.out` va conţine pe prima linie lungimea minimă a drumului cerut de problemă, un număr real. Linia a doua va conţine numărul drumurilor minime distincte, un număr natural. 
+
+# Restricţii şi precizări
+* `0 ≤ xG, xpr ≤ Xparc ≤ 30 000, 0 ≤ yG, ypr ≤ Yparc ≤ 30 000`;
+* `0 < m, n < 2000`;
+* perechile de numere naturale ce definesc o pistă nu sunt ordonate;
+* pistele orizontale, şi cele verticale nu sunt ordonate în fişierul de intrare;
+* două piste de aceeaşi direcţie nu se suprapun;
+* Gigel şi prietenului lui sunt pe zone pietonale (incluzând şi marginile acestora);
+* două drumuri sunt distincte dacă diferă prin cel puţin un punct;
+* numărul de drumuri distincte nu va depăşi `1 000 000 000`;
+* lungimea drumului din fişierul de ieşire este un număr real ce se va accepta cu eroare maxima de `0.01`;
+* nu se admite formatul ştiinţific pentru afişarea numerelor reale; 
+* prima cerinţă valorează `40%` din punctaj, iar a doua valorează `60%` din punctaj.
+
+---
+
+Example:
+`parc.in`
+```
+10 8
+1 1 8 7
+2
+5 8 
+2 4
+2
+4 2
+0 1
+```
+
+`parc.out`
+```
+11.472136
+1
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <tuple>
+
+const int MAXN = 30000;
+const int MAXM = 2000;
+const double eps = 0.01;
+
+typedef std::pair<int,int> point;
+
+struct path{
+	double len;
+	std::vector<point> path;
+	bool operator<(const path &that)const{
+		return len > that.len;
+	}
+};
+
+std::pair<point, point> get_segment_from_track(double track, int axis){
+	if(axis == 0)
+		return std::make_pair(point(0, track), point(MAXN, track));
+	return std::make_pair(point(track, 0), point(track, MAXN));
+}
+
+double dist(const point &a, const point &b){
+	return sqrt((a.first - b.first) * (a.first - b.first) + (a.second - b.second) * (a.second - b.second));
+}
+
+double len_path_segment(const point &a, const point &b){
+	return dist(a,b);
+}
+
+double len_path_segment(const point &a, const point &b, const point &track){
+	if(a.first == b.first && a.first == track.first)
+		return dist(a,b);
+	if(a.second == b.second && a.second == track.second)
+		return dist(a,b);
+	return dist(a,track) + dist(track, b);
+}
+
+double min_len_path(const point &a, const point &b, const std::vector<std::pair<point, point>> &tracks){
+	std::priority_queue<path> pq;
+	pq.push({len_path_segment(a, b), {a, b}});
+
+	double min_len = 1e15;
+	int min_count = 0;
+	while(!pq.empty()){
+		path current = pq.top();
+		pq.pop();
+
+		if(abs(current.len - min_len) < eps){
+			min_count++;
+		}
+		else if(current.len > min_len){
+			min_count = 1;
+			min_len = current.len;
+		}
+		else
+			continue;
+
+		const point &last = current.path.back();
+		if(last == b){
+			continue;
+		}
+		for(const auto &track : tracks){
+			std::vector<point> new_path = current.path;
+			new_path.push_back(track.first);
+			new_path.push_back(track.second);
+			double new_len = current.len + len_path_segment(last, track.first, track.second);
+			pq.push({new_len, new_path});
+		}
+	}
+	return min_len;
+}
+
+int main() {
+	std::ifstream f("parc.in");
+	int Xparc, Yparc;
+	f >> Xparc >> Yparc;
+	point a, b;
+	f >> a.first >> a.second >> b.first >> b.second;
+	int m, n;
+	f >> m >> n;
+	std::vector<std::pair<point, point>> tracks_v(m), tracks_h(n);
+	for(auto &track : tracks_v){
+		f >> track.first.first >> track.second.first;
+	}
+	for(auto &track : tracks_h){
+		f >> track.first.second >> track.second.second;
+	}
+	f.close();
+
+	std::vector<std::pair<point, point>> all_tracks;
+	all_tracks.reserve(m+n);
+	for(int i=0; i<m; i++)
+		all_tracks.push_back(get_segment_from_track(tracks_v[i].first.first, 0));
+	for(int i=0; i<m; i++)
+		all_tracks.push_back(get_segment_from_track(tracks_v[i].second.first, 0));
+	for(int i=0; i<n; i++)
+		all_tracks.push_back(get_segment_from_track(tracks_h[i].first.second, 1));
+	for(int i=0; i<n; i++)
+		all_tracks.push_back(get_segment_from_track(tracks_h[i].second.second, 1));
+
+	double len = min_len_path(a, b, all_tracks);
+	std::ofstream g("parc.out");
+	g.precision(10);
+	g << len << '\n';
+	g.close();
+	return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:16:30: error: 'path' does not name a type
+   16 |         bool operator<(const path &that)const{
+      |                              ^~~~
+main.cpp: In member function 'bool path::operator<(const int&) const':
+main.cpp:17:35: error: request for member 'len' in 'that', which is of non-class type 'const int'
+   17 |                 return len > that.len;
+      |                                   ^~~
+main.cpp: In function 'double dist(const point&, const point&)':
+main.cpp:28:16: error: 'sqrt' was not declared in this scope
+   28 |         return sqrt((a.first - b.first) * (a.first - b.first) + (a.second - b.second) * (a.second - b.second));
+      |                ^~~~
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h: In instantiation of 'constexpr bool std::less<_Tp>::operator()(const _Tp&, const _Tp&) const [with _Tp = path]':
+/usr/local/include/c++/11.4.0/bits/predefined_ops.h:196:23:   required from 'bool __gnu_cxx::__ops::_Iter_comp_val<_Compare>::operator()(_Iterator, _Value&) [with _Iterator = __gnu_cxx::__normal_iterator<path*, std::vector<path, std::allocator<path> > >; _Value = path; _Compare = std::less<path>]'
+/usr/local/include/c++/11.4.0/bits/stl_heap.h:139:48:   required from 'void std::__push_heap(_RandomAccessIterator, _Distance, _Distance, _Tp, _Compare&) [with _RandomAccessIterator = __gnu_cxx::__normal_iterator<path*, std::vector<path, std::allocator<path> > >; _Distance = long int; _Tp = path; _Compare = __gnu_cxx::__ops::_Iter_comp_val<std::less<path> >]'
+/usr/local/include/c++/11.4.0/bits/stl_heap.h:215:23:   required from 'void std::push_heap(_RandomAccessIterator, _RandomAccessIterator, _Compare) [with _RandomAccessIterator = __gnu_cxx::__normal_iterator<path*, std::vector<path, std::allocator<path> > >; _Compare = std::less<path>]'
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:651:16:   required from 'void std::priority_queue<_Tp, _Sequence, _Compare>::push(std::priority_queue<_Tp, _Sequence, _Compare>::value_type&&) [with _Tp = path; _Sequence = std::vector<path, std::allocator<path> >; _Compare = std::less<path>; std::priority_queue<_Tp, _Sequence, _Compare>::value_type = path]'
+main.cpp:45:9:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: error: no match for 'operator<' (operand types are 'const path' and 'const path')
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+main.cpp:16:14: note: candidate: 'bool path::operator<(const int&) const'
+   16 |         bool operator<(const path &that)const{
+      |              ^~~~~~~~
+main.cpp:16:36: note:   no known conversion for argument 1 from 'const path' to 'const int&'
+   16 |         bool operator<(const path &that)const{
+      |                        ~~~~~~~~~~~~^~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_pair.h:489:5: note: candidate: 'template<class _T1, class _T2> constexpr bool std::operator<(const std::pair<_T1, _T2>&, const std::pair<_T1, _T2>&)'
+  489 |     operator<(const pair<_T1, _T2>& __x, const pair<_T1, _T2>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_pair.h:489:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::pair<_T1, _T2>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:426:5: note: candidate: 'template<class _Iterator> constexpr bool std::operator<(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_Iterator>&)'
+  426 |     operator<(const reverse_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:426:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::reverse_iterator<_Iterator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:465:5: note: candidate: 'template<class _IteratorL, class _IteratorR> constexpr bool std::operator<(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)'
+  465 |     operator<(const reverse_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:465:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::reverse_iterator<_Iterator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1609:5: note: candidate: 'template<class _IteratorL, class _IteratorR> constexpr bool std::operator<(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)'
+ 1609 |     operator<(const move_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1609:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::move_iterator<_IteratorL>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1667:5: note: candidate: 'template<class _Iterator> constexpr bool std::operator<(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorL>&)'
+ 1667 |     operator<(const move_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1667:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::move_iterator<_IteratorL>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:589:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator<(std::basic_string_view<_CharT, _Traits>, std::basic_string_view<_CharT, _Traits>)'
+  589 |     operator< (basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:589:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'path' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:595:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator<(std::basic_string_view<_CharT, _Traits>, std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >)'
+  595 |     operator< (basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:595:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'path' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:602:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator<(std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >, std::basic_string_view<_CharT, _Traits>)'
+  602 |     operator< (__type_identity_t<basic_string_view<_CharT, _Traits>> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:602:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'path' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6340:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator<(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6340 |     operator<(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6340:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6353:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator<(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const _CharT*)'
+ 6353 |     operator<(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6353:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6365:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator<(const _CharT*, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6365 |     operator<(const _CharT* __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6365:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   mismatched types 'const _CharT*' and 'path'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1930:5: note: candidate: 'template<class _Tp, class _Alloc> bool std::operator<(const std::vector<_Tp, _Alloc>&, const std::vector<_Tp, _Alloc>&)'
+ 1930 |     operator<(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1930:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::vector<_Tp, _Alloc>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/deque:67,
+                 from /usr/local/include/c++/11.4.0/queue:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_deque.h:2285:5: note: candidate: 'template<class _Tp, class _Alloc> bool std::operator<(const std::deque<_Tp, _Alloc>&, const std::deque<_Tp, _Alloc>&)'
+ 2285 |     operator<(const deque<_Tp, _Alloc>& __x, const deque<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_deque.h:2285:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::deque<_Tp, _Alloc>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/queue:64,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:362:5: note: candidate: 'template<class _Tp, class _Seq> bool std::operator<(const std::queue<_Tp, _Seq>&, const std::queue<_Tp, _Seq>&)'
+  362 |     operator<(const queue<_Tp, _Seq>& __x, const queue<_Tp, _Seq>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:362:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::queue<_Tp, _Seq>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:311:5: note: candidate: 'template<class _Tp, long unsigned int _Nm> bool std::operator<(const std::array<_Tp, _Nm>&, const std::array<_Tp, _Nm>&)'
+  311 |     operator<(const array<_Tp, _Nm>& __a, const array<_Tp, _Nm>& __b)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/array:311:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::array<_Tp, _Nm>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1566:5: note: candidate: 'template<class ... _TElements, class ... _UElements> constexpr bool std::operator<(const std::tuple<_Tps ...>&, const std::tuple<_UTypes ...>&)'
+ 1566 |     operator<(const tuple<_TElements...>& __t,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/tuple:1566:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::tuple<_Tps ...>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/ios_base.h:46,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/system_error:269:3: note: candidate: 'bool std::operator<(const std::error_code&, const std::error_code&)'
+  269 |   operator<(const error_code& __lhs, const error_code& __rhs) noexcept
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:269:31: note:   no known conversion for argument 1 from 'const path' to 'const std::error_code&'
+  269 |   operator<(const error_code& __lhs, const error_code& __rhs) noexcept
+      |             ~~~~~~~~~~~~~~~~~~^~~~~
+/usr/local/include/c++/11.4.0/system_error:398:3: note: candidate: 'bool std::operator<(const std::error_condition&, const std::error_condition&)'
+  398 |   operator<(const error_condition& __lhs,
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:398:36: note:   no known conversion for argument 1 from 'const path' to 'const std::error_condition&'
+  398 |   operator<(const error_condition& __lhs,
+      |             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <tuple>
+
+const int MAXN = 30000;
+const int MAXM = 2000;
+const double eps = 0.01;
+
+typedef std::pair<int,int> point;
+
+struct path{
+	double len;
+	std::vector<point> path;
+	bool operator<(const path &that)const{
+		return len > that.len;
+	}
+};
+
+double dist(const point &a, const point &b){
+	return sqrt((a.first - b.first) * (a.first - b.first) + (a.second - b.second) * (a.second - b.second));
+}
+
+double len_path_segment(const point &a, const point &b){
+	return dist(a,b);
+}
+
+double len_path_segment(const point &a, const point &b, const point &track){
+	if(a.first == b.first && a.first == track.first)
+		return dist(a,b);
+	if(a.second == b.second && a.second == track.second)
+		return dist(a,b);
+	return dist(a,track) + dist(track, b);
+}
+
+double min_len_path(const point &a, const point &b, const std::vector<std::pair<point, point>> &tracks){
+	std::priority_queue<path> pq;
+	pq.push({len_path_segment(a, b), {a, b}});
+
+	double min_len = 1e15;
+	int min_count = 0;
+	while(!pq.empty()){
+		path current = pq.top();
+		pq.pop();
+
+		if(abs(current.len - min_len) < eps){
+			min_count++;
+		}
+		else if(current.len > min_len){
+			min_count = 1;
+			min_len = current.len;
+		}
+		else
+			continue;
+
+		const point &last = current.path.back();
+		if(last == b){
+			continue;
+		}
+		for(const auto &track : tracks){
+			std::vector<point> new_path = current.path;
+			new_path.push_back(track.first);
+			new_path.push_back(track.second);
+			double new_len = current.len + len_path_segment(last, track.first, track.second);
+			pq.push({new_len, new_path});
+		}
+	}
+	return min_len;
+}
+
+int main() {
+	std::ifstream f("parc.in");
+	int Xparc, Yparc;
+	f >> Xparc >> Yparc;
+	point a, b;
+	f >> a.first >> a.second >> b.first >> b.second;
+	int m, n;
+	f >> m >> n;
+	std::vector<std::pair<point, point>> tracks_v(m), tracks_h(n);
+	for(auto &track : tracks_v){
+		f >> track.first.first >> track.second.first;
+	}
+	for(auto &track : tracks_h){
+		f >> track.first.second >> track.second.second;
+	}
+	f.close();
+
+	std::vector<std::pair<point, point>> all_tracks;
+	all_tracks.reserve(m+n);
+	for(int i=0; i<m; i++)
+		all_tracks.push_back(std::make_pair(point(tracks_v[i].first.first, 0), point(tracks_v[i].second.first, MAXN)));
+	for(int i=0; i<m; i++)
+		all_tracks.push_back(std::make_pair(point(tracks_v[i].second.first, 0), point(tracks_v[i].second.first, MAXN)));
+	for(int i=0; i<n; i++)
+		all_tracks.push_back(std::make_pair(point(0, tracks_h[i].first.second), point(MAXN, tracks_h[i].second.second)));
+	for(int i=0; i<n; i++)
+		all_tracks.push_back(std::make_pair(point(0, tracks_h[i].second.second), point(MAXN, tracks_h[i].second.second)));
+
+	double len = min_len_path(a, b, all_tracks);
+	std::ofstream g("parc.out");
+	g.precision(10);
+	g << len << '\n';
+	g.close();
+	return 0;
+}
+
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:16:30: error: 'path' does not name a type
+   16 |         bool operator<(const path &that)const{
+      |                              ^~~~
+main.cpp: In member function 'bool path::operator<(const int&) const':
+main.cpp:17:35: error: request for member 'len' in 'that', which is of non-class type 'const int'
+   17 |                 return len > that.len;
+      |                                   ^~~
+main.cpp: In function 'double dist(const point&, const point&)':
+main.cpp:22:16: error: 'sqrt' was not declared in this scope
+   22 |         return sqrt((a.first - b.first) * (a.first - b.first) + (a.second - b.second) * (a.second - b.second));
+      |                ^~~~
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h: In instantiation of 'constexpr bool std::less<_Tp>::operator()(const _Tp&, const _Tp&) const [with _Tp = path]':
+/usr/local/include/c++/11.4.0/bits/predefined_ops.h:196:23:   required from 'bool __gnu_cxx::__ops::_Iter_comp_val<_Compare>::operator()(_Iterator, _Value&) [with _Iterator = __gnu_cxx::__normal_iterator<path*, std::vector<path, std::allocator<path> > >; _Value = path; _Compare = std::less<path>]'
+/usr/local/include/c++/11.4.0/bits/stl_heap.h:139:48:   required from 'void std::__push_heap(_RandomAccessIterator, _Distance, _Distance, _Tp, _Compare&) [with _RandomAccessIterator = __gnu_cxx::__normal_iterator<path*, std::vector<path, std::allocator<path> > >; _Distance = long int; _Tp = path; _Compare = __gnu_cxx::__ops::_Iter_comp_val<std::less<path> >]'
+/usr/local/include/c++/11.4.0/bits/stl_heap.h:215:23:   required from 'void std::push_heap(_RandomAccessIterator, _RandomAccessIterator, _Compare) [with _RandomAccessIterator = __gnu_cxx::__normal_iterator<path*, std::vector<path, std::allocator<path> > >; _Compare = std::less<path>]'
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:651:16:   required from 'void std::priority_queue<_Tp, _Sequence, _Compare>::push(std::priority_queue<_Tp, _Sequence, _Compare>::value_type&&) [with _Tp = path; _Sequence = std::vector<path, std::allocator<path> >; _Compare = std::less<path>; std::priority_queue<_Tp, _Sequence, _Compare>::value_type = path]'
+main.cpp:39:9:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: error: no match for 'operator<' (operand types are 'const path' and 'const path')
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+main.cpp:16:14: note: candidate: 'bool path::operator<(const int&) const'
+   16 |         bool operator<(const path &that)const{
+      |              ^~~~~~~~
+main.cpp:16:36: note:   no known conversion for argument 1 from 'const path' to 'const int&'
+   16 |         bool operator<(const path &that)const{
+      |                        ~~~~~~~~~~~~^~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_pair.h:489:5: note: candidate: 'template<class _T1, class _T2> constexpr bool std::operator<(const std::pair<_T1, _T2>&, const std::pair<_T1, _T2>&)'
+  489 |     operator<(const pair<_T1, _T2>& __x, const pair<_T1, _T2>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_pair.h:489:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::pair<_T1, _T2>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:426:5: note: candidate: 'template<class _Iterator> constexpr bool std::operator<(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_Iterator>&)'
+  426 |     operator<(const reverse_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:426:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::reverse_iterator<_Iterator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:465:5: note: candidate: 'template<class _IteratorL, class _IteratorR> constexpr bool std::operator<(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)'
+  465 |     operator<(const reverse_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:465:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::reverse_iterator<_Iterator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1609:5: note: candidate: 'template<class _IteratorL, class _IteratorR> constexpr bool std::operator<(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)'
+ 1609 |     operator<(const move_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1609:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::move_iterator<_IteratorL>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1667:5: note: candidate: 'template<class _Iterator> constexpr bool std::operator<(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorL>&)'
+ 1667 |     operator<(const move_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1667:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::move_iterator<_IteratorL>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:589:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator<(std::basic_string_view<_CharT, _Traits>, std::basic_string_view<_CharT, _Traits>)'
+  589 |     operator< (basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:589:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'path' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:595:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator<(std::basic_string_view<_CharT, _Traits>, std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >)'
+  595 |     operator< (basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:595:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'path' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:602:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator<(std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >, std::basic_string_view<_CharT, _Traits>)'
+  602 |     operator< (__type_identity_t<basic_string_view<_CharT, _Traits>> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:602:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'path' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6340:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator<(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6340 |     operator<(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6340:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6353:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator<(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const _CharT*)'
+ 6353 |     operator<(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6353:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6365:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator<(const _CharT*, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6365 |     operator<(const _CharT* __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6365:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   mismatched types 'const _CharT*' and 'path'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1930:5: note: candidate: 'template<class _Tp, class _Alloc> bool std::operator<(const std::vector<_Tp, _Alloc>&, const std::vector<_Tp, _Alloc>&)'
+ 1930 |     operator<(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1930:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::vector<_Tp, _Alloc>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/deque:67,
+                 from /usr/local/include/c++/11.4.0/queue:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_deque.h:2285:5: note: candidate: 'template<class _Tp, class _Alloc> bool std::operator<(const std::deque<_Tp, _Alloc>&, const std::deque<_Tp, _Alloc>&)'
+ 2285 |     operator<(const deque<_Tp, _Alloc>& __x, const deque<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_deque.h:2285:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::deque<_Tp, _Alloc>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/queue:64,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:362:5: note: candidate: 'template<class _Tp, class _Seq> bool std::operator<(const std::queue<_Tp, _Seq>&, const std::queue<_Tp, _Seq>&)'
+  362 |     operator<(const queue<_Tp, _Seq>& __x, const queue<_Tp, _Seq>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:362:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::queue<_Tp, _Seq>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/tuple:39,
+                 from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/array:311:5: note: candidate: 'template<class _Tp, long unsigned int _Nm> bool std::operator<(const std::array<_Tp, _Nm>&, const std::array<_Tp, _Nm>&)'
+  311 |     operator<(const array<_Tp, _Nm>& __a, const array<_Tp, _Nm>& __b)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/array:311:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::array<_Tp, _Nm>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/functional:54,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:4:
+/usr/local/include/c++/11.4.0/tuple:1566:5: note: candidate: 'template<class ... _TElements, class ... _UElements> constexpr bool std::operator<(const std::tuple<_Tps ...>&, const std::tuple<_UTypes ...>&)'
+ 1566 |     operator<(const tuple<_TElements...>& __t,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/tuple:1566:5: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/string:48,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_function.h:400:20: note:   'const path' is not derived from 'const std::tuple<_Tps ...>'
+  400 |       { return __x < __y; }
+      |                ~~~~^~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/ios_base.h:46,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/system_error:269:3: note: candidate: 'bool std::operator<(const std::error_code&, const std::error_code&)'
+  269 |   operator<(const error_code& __lhs, const error_code& __rhs) noexcept
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:269:31: note:   no known conversion for argument 1 from 'const path' to 'const std::error_code&'
+  269 |   operator<(const error_code& __lhs, const error_code& __rhs) noexcept
+      |             ~~~~~~~~~~~~~~~~~~^~~~~
+/usr/local/include/c++/11.4.0/system_error:398:3: note: candidate: 'bool std::operator<(const std::error_condition&, const std::error_condition&)'
+  398 |   operator<(const error_condition& __lhs,
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:398:36: note:   no known conversion for argument 1 from 'const path' to 'const std::error_condition&'
+  398 |   operator<(const error_condition& __lhs,
+      |             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <tuple>
+
+const int MAXN = 30000;
+const int MAXM = 2000;
+const double eps = 0.01;
+
+typedef std::pair<int,int> point;
+
+struct path{
+	double len;
+	std::vector<point> path;
+	bool operator<(const path &that)const{
+		return len < that.len;
+	}
+};
+
+double dist(const point &a, const point &b){
+	return sqrt((a.first - b.first) * (a.first - b.first) + (a.second - b.second) * (a.second - b.second));
+}
+
+double len_path_segment(const point &a, const point &b){
+	return dist(a,b);
+}
+
+double len_path_segment(const point &a, const point &b, const point &track){
+	if(a.first == b.first && a.first == track.first)
+		return dist(a,b);
+	if(a.second == b.second && a.second == track.second)
+		return dist(a,b);
+	return dist(a,track) + dist(track, b);
+}
+
+double min_len_path(const point &a, const point &b, const std::vector<std::pair<point, point>> &tracks){
+	std::priority_queue<path> pq;
+	pq.push({len_path_segment(a, b), {a, b}});
+
+	double min_len = 1e15;
+	int min_count = 0;
+	while(!pq.empty()){
+		path current = pq.top();
+		pq.pop();
+
+		if(abs(current.len - min_len) < eps){
+			min_count++;
+		}
+		else if(current.len > min_len){
+			min_count = 1;
+			min_len = current.len;
+		}
+		else
+			continue;
+
+		const point &last = current.path.back();
+		if(last == b){
+			continue;
+		}
+		for(const auto &track : tracks){
+			std::vector<point> new_path = current.path;
+			new_path.push_back(track.first);
+			new_path.push_back(track.second);
+			double new_len = current.len + len_path_segment(last, track.first, track.second);
+			pq.push({new_len, new_path});
+		}
+	}
+	return min_len;
+}
+
+int main() {
+	std::ifstream f("parc.in");
+	int Xparc, Yparc;
+	f >> Xparc >> Yparc;
+	point a, b;
+	f >> a.first >> a.second >> b.first >> b.second;
+	int m, n;
+	f >> m >> n;
+	std::vector<std::pair<point, point>> tracks_v(m), tracks_h(n);
+	for(auto &track : tracks_v){
+		f >> track.first.first >> track.second.first;
+	}
+	for(auto &track : tracks_h){
+		f >> track.first.second >> track.second.second;
+	}
+	f.close();
+
+	std::vector<std::pair<point, point>> all_tracks;
+	all_tracks.reserve(m+n);
+	for(int i=0; i<m; i++)
+		all_tracks.push_back(std::make_pair(point(tracks_v[i].first.first, 0), point(tracks_v[i].second.first, MAXN)));
+	for(int i=0; i<m; i++)
+		all_tracks.push_back(std::make_pair(point(tracks_v[i].second.first, 0), point(tracks_v[i].second.first, MAXN)));
+	for(int i=0; i<n; i++)
+		all_tracks.push_back(std::make_pair(point(0, tracks_h[i].first.second), point(MAXN, tracks_h[i].second.second)));
+	for(int i=0; i<n; i++)
+		all_tracks.push_back(std::make_pair(point(0, tracks_h[i].second.second), point(MAXN, tracks_h[i].second.second)));
+
+	double len = min_len_path(a, b, all_tracks);
+	std::ofstream g("parc.out");
+	g.precision(10);
+	g << len << '\n';
+	g.close();
+	return 0;
+}
+
+```

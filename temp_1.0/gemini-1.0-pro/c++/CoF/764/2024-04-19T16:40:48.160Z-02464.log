@@ -1,0 +1,1077 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `ceas.in` and write to `ceas.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Afișarea cu ajutorul led-urilor este un fapt banal astăzi. Pe lângă consumul redus, oferă și o imagine spectaculoasă, atractivă. Fiind informaticieni în devenire, este util pentru noi să avem la dispoziție un **ceas binar**. Un astfel de ceas are 8 coloane de leduri. Fiecărei cifre din afișarea orei îi corespunde o coloană verticală cu maxim $4$ leduri. Fiecare cifră a orei este reprezentată în binar, iar coloana corespunzătoare de leduri vizualizează această reprezentare, poziția binară $0$ a reprezentării fiind la baza coloanei. Astfel, orei `10:35:42.68` îi va corespunde configurația:
+
+~[ceas.png|align=center]
+
+Este evident faptul că prima coloană are nevoie doar de $2$ leduri, deoarece această coloană vizualizează doar valorile $0, 1$ și $2$. În mod analog, coloanele $3$ și $5$ au nevoie doar de $3$ leduri, deoarece valorile care trebuie vizualizate sunt $0, 1, 2, 3, 4, 5$. În celelate coloane vor fi vizualizate și valorile $7, 8$ și $9$, deci sunt necesare câte $4$ leduri.
+
+# Cerință
+
+Fiind dată configurația ceasului binar la un moment dat și o perioadă de timp exprimată în sutimi de secundă, să se determine și să se afișeze configurația ceasului după trecerea perioadei respective de timp.
+
+# Date de intrare
+
+Fișierul de intrare `ceas.in` conține $5$ linii. Primele $4$ linii conțin configurația inițială a ceasului, iar linia a $5$-a perioada de timp $t$. Pentru configurația ceasului se folosesc caracterele ` `$\ $(spațiu), `x` și `o`. Caracterul ` `$\ $reprezintă poziția unui led care lipsește, caracterul `x` poziția unui led stins iar caracterul `o` poziția unui led aprins.
+
+# Date de ieșire
+
+Fișierul de ieșire `ceas.out` conține pe primele $4$ linii configurația finală a ceasului în modul descris mai sus, utilizând aceleași caractere ` `, `x`, `o`. Cele $4$ linii încep din coloana $1$.
+
+# Restricții și precizări
+
+* $0 \leq t \leq 2 \cdot 10^9$;
+
+---
+
+Example:
+`ceas.in`
+```
+ x x xxo
+ xxooxox
+xxoxxoox
+oxooxxxx
+123
+```
+
+`ceas.out`
+```
+ x x xox
+ xxooxxx
+xxoxxoxx
+oxooxooo
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```cpp
+#include <algorithm>
+#include <chrono>
+#include <fstream>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace chrono = std::chrono;
+
+class Timer {
+public:
+    Timer() noexcept { restart(); }
+
+    void restart() noexcept { m_begin = chrono::high_resolution_clock::now(); }
+
+    uint64_t elapsed_milliseconds() const noexcept {
+        auto const now = chrono::high_resolution_clock::now();
+        auto const duration = now - m_begin;
+        return chrono::duration_cast<chrono::milliseconds>(duration).count();
+    }
+
+private:
+    chrono::time_point<chrono::high_resolution_clock> m_begin;
+};
+
+struct Bit {
+    bool value;
+};
+
+struct Digit {
+    std::vector<Bit> bits;
+    static Digit create(unsigned value, unsigned num_bits) {
+        Digit digit;
+        digit.bits.reserve(num_bits);
+        for (unsigned i = 0; i < num_bits; ++i) {
+            unsigned bit_mask = 1u << i;
+            bool bit_value = (value & bit_mask) == bit_mask;
+            digit.bits.push_back({bit_value});
+        }
+        return digit;
+    }
+};
+
+struct Display {
+    std::map<unsigned, Digit> m_digits;
+    unsigned num_columns;
+    void init() {
+        m_digits[0] = Digit::create(0, 2);
+        m_digits[1] = Digit::create(1, 2);
+        m_digits[2] = Digit::create(2, 2);
+        m_digits[3] = Digit::create(3, 3);
+        m_digits[4] = Digit::create(4, 3);
+        m_digits[5] = Digit::create(5, 3);
+        m_digits[6] = Digit::create(6, 4);
+        m_digits[7] = Digit::create(7, 4);
+        m_digits[8] = Digit::create(8, 4);
+        m_digits[9] = Digit::create(9, 4);
+        num_columns = 8;
+    }
+    void update(unsigned value, std::vector<char>& display, unsigned column) {
+        unsigned row = 1;
+        auto const& digit = m_digits[value];
+        for (int i = digit.bits.size() - 1; i >= 0; --i) {
+            const bool bit_value = digit.bits[i].value;
+            const auto code = bit_value ? 'o' : 'x';
+            display[column + row++] = code;
+        }
+    }
+};
+
+int main() {
+    Display display;
+    display.init();
+    Timer timer;
+    std::ifstream in("ceas.in");
+    std::ofstream out("ceas.out");
+    std::vector<char> buf(display.num_columns * 6 + 1);
+    unsigned time;
+    in >> buf >> buf >> buf >> buf >> time;
+    in.close();
+    unsigned milliseconds = time * 10;
+    if (milliseconds == 0) {
+        out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+        return 0;
+    }
+    unsigned second = milliseconds / 100;
+    milliseconds %= 100;
+    std::vector<unsigned> values = {milliseconds, second / 60, second / 3600, second / 86400};
+    std::ranges::sort(values, std::greater<>{});
+    for (unsigned v : values) {
+        if (milliseconds == 0 && second > 0) {
+            for (unsigned column = 0; column < display.num_columns; ++column) {
+                buf[column * 6 + 3] = ' ';
+            }
+        }
+        unsigned val = second > 0 ? milliseconds : v;
+        unsigned column = 0;
+        for (int i = 2; i >= 0; --i) {
+            unsigned n = val % 10;
+            display.update(n, buf, column);
+            column += 3;
+            val /= 10;
+        }
+        if (millisecond > 0) {
+            buf[2] = buf[5] = 'o';
+        }
+        out << buf << "\n";
+        if (val == 0) {
+            break;
+        }
+        while (val > 0) {
+            buf[5] = (buf[5] == 'x') ? 'o' : 'x';
+            val--;
+        }
+    }
+    out.close();
+    return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'int main()':
+main.cpp:79:8: error: no match for 'operator>>' (operand types are 'std::ifstream' {aka 'std::basic_ifstream<char>'} and 'std::vector<char>')
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |     ~~ ^~ ~~~
+      |     |     |
+      |     |     std::vector<char>
+      |     std::ifstream {aka std::basic_ifstream<char>}
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:120:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(std::basic_istream<_CharT, _Traits>::__istream_type& (*)(std::basic_istream<_CharT, _Traits>::__istream_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  120 |       operator>>(__istream_type& (*__pf)(__istream_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:120:36: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_istream<char>::__istream_type& (*)(std::basic_istream<char>::__istream_type&)' {aka 'std::basic_istream<char>& (*)(std::basic_istream<char>&)'}
+  120 |       operator>>(__istream_type& (*__pf)(__istream_type&))
+      |                  ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/istream:124:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(std::basic_istream<_CharT, _Traits>::__ios_type& (*)(std::basic_istream<_CharT, _Traits>::__ios_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>; std::basic_istream<_CharT, _Traits>::__ios_type = std::basic_ios<char>]'
+  124 |       operator>>(__ios_type& (*__pf)(__ios_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:124:32: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_istream<char>::__ios_type& (*)(std::basic_istream<char>::__ios_type&)' {aka 'std::basic_ios<char>& (*)(std::basic_ios<char>&)'}
+  124 |       operator>>(__ios_type& (*__pf)(__ios_type&))
+      |                  ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/istream:131:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(std::ios_base& (*)(std::ios_base&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  131 |       operator>>(ios_base& (*__pf)(ios_base&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:131:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::ios_base& (*)(std::ios_base&)'
+  131 |       operator>>(ios_base& (*__pf)(ios_base&))
+      |                  ~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/istream:168:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(bool&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  168 |       operator>>(bool& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:168:24: note:   no known conversion for argument 1 from 'std::vector<char>' to 'bool&'
+  168 |       operator>>(bool& __n)
+      |                  ~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:172:7: note: candidate: 'std::basic_istream<_CharT, _Traits>& std::basic_istream<_CharT, _Traits>::operator>>(short int&) [with _CharT = char; _Traits = std::char_traits<char>]'
+  172 |       operator>>(short& __n);
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:172:25: note:   no known conversion for argument 1 from 'std::vector<char>' to 'short int&'
+  172 |       operator>>(short& __n);
+      |                  ~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:175:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(short unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  175 |       operator>>(unsigned short& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:175:34: note:   no known conversion for argument 1 from 'std::vector<char>' to 'short unsigned int&'
+  175 |       operator>>(unsigned short& __n)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:179:7: note: candidate: 'std::basic_istream<_CharT, _Traits>& std::basic_istream<_CharT, _Traits>::operator>>(int&) [with _CharT = char; _Traits = std::char_traits<char>]'
+  179 |       operator>>(int& __n);
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:179:23: note:   no known conversion for argument 1 from 'std::vector<char>' to 'int&'
+  179 |       operator>>(int& __n);
+      |                  ~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:182:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  182 |       operator>>(unsigned int& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:182:32: note:   no known conversion for argument 1 from 'std::vector<char>' to 'unsigned int&'
+  182 |       operator>>(unsigned int& __n)
+      |                  ~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:186:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  186 |       operator>>(long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:186:24: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long int&'
+  186 |       operator>>(long& __n)
+      |                  ~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:190:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  190 |       operator>>(unsigned long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:190:33: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long unsigned int&'
+  190 |       operator>>(unsigned long& __n)
+      |                  ~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:195:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long long int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  195 |       operator>>(long long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:195:29: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long long int&'
+  195 |       operator>>(long long& __n)
+      |                  ~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:199:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long long unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  199 |       operator>>(unsigned long long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:199:38: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long long unsigned int&'
+  199 |       operator>>(unsigned long long& __n)
+      |                  ~~~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:214:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(float&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  214 |       operator>>(float& __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:214:25: note:   no known conversion for argument 1 from 'std::vector<char>' to 'float&'
+  214 |       operator>>(float& __f)
+      |                  ~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:218:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(double&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  218 |       operator>>(double& __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:218:26: note:   no known conversion for argument 1 from 'std::vector<char>' to 'double&'
+  218 |       operator>>(double& __f)
+      |                  ~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:222:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long double&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  222 |       operator>>(long double& __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:222:31: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long double&'
+  222 |       operator>>(long double& __f)
+      |                  ~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:235:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(void*&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  235 |       operator>>(void*& __p)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:235:25: note:   no known conversion for argument 1 from 'std::vector<char>' to 'void*&'
+  235 |       operator>>(void*& __p)
+      |                  ~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:259:7: note: candidate: 'std::basic_istream<_CharT, _Traits>& std::basic_istream<_CharT, _Traits>::operator>>(std::basic_istream<_CharT, _Traits>::__streambuf_type*) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__streambuf_type = std::basic_streambuf<char>]'
+  259 |       operator>>(__streambuf_type* __sb);
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:259:36: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_istream<char>::__streambuf_type*' {aka 'std::basic_streambuf<char>*'}
+  259 |       operator>>(__streambuf_type* __sb);
+      |                  ~~~~~~~~~~~~~~~~~~^~~~
+In file included from /usr/local/include/c++/11.4.0/string:56,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/basic_string.tcc:1485:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> std::basic_istream<_CharT, _Traits>& std::operator>>(std::basic_istream<_CharT, _Traits>&, std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 1485 |     operator>>(basic_istream<_CharT, _Traits>& __in,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.tcc:1485:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   'std::vector<char>' is not derived from 'std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:1016,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/istream.tcc:958:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_istream<_CharT, _Traits>& std::operator>>(std::basic_istream<_CharT, _Traits>&, _CharT&)'
+  958 |     operator>>(basic_istream<_CharT, _Traits>& __in, _CharT& __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/istream.tcc:958:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   deduced conflicting types for parameter '_CharT' ('char' and 'std::vector<char>')
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:756:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, unsigned char&)'
+  756 |     operator>>(basic_istream<char, _Traits>& __in, unsigned char& __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:756:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'unsigned char&'
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:761:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, signed char&)'
+  761 |     operator>>(basic_istream<char, _Traits>& __in, signed char& __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:761:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'signed char&'
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:803:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_istream<_CharT, _Traits>& std::operator>>(std::basic_istream<_CharT, _Traits>&, _CharT*)'
+  803 |     operator>>(basic_istream<_CharT, _Traits>& __in, _CharT* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:803:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   mismatched types '_CharT*' and 'std::vector<char>'
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:846:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, unsigned char*)'
+  846 |     operator>>(basic_istream<char, _Traits>& __in, unsigned char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:846:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'unsigned char*'
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:852:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, signed char*)'
+  852 |     operator>>(basic_istream<char, _Traits>& __in, signed char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:852:5: note:   template argument deduction/substitution failed:
+main.cpp:79:11: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'signed char*'
+   79 |     in >> buf >> buf >> buf >> buf >> time;
+      |           ^~~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/istream:1006:5: note: candidate: 'template<class _Istream, class _Tp> _Istream&& std::operator>>(_Istream&&, _Tp&&)'
+ 1006 |     operator>>(_Istream&& __is, _Tp&& __x)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:1006:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/istream: In substitution of 'template<class _Istream, class _Tp> _Istream&& std::operator>>(_Istream&&, _Tp&&) [with _Istream = std::basic_ifstream<char>&; _Tp = std::vector<char>&]':
+main.cpp:79:11:   required from here
+/usr/local/include/c++/11.4.0/istream:1006:5: error: no type named 'type' in 'struct std::enable_if<false, void>'
+main.cpp:83:13: error: no match for 'operator<<' (operand types are 'std::ofstream' {aka 'std::basic_ofstream<char>'} and 'std::vector<char>')
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |         ~~~ ^~ ~~~
+      |         |      |
+      |         |      std::vector<char>
+      |         std::ofstream {aka std::basic_ofstream<char>}
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:108:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::basic_ostream<_CharT, _Traits>::__ostream_type& (*)(std::basic_ostream<_CharT, _Traits>::__ostream_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  108 |       operator<<(__ostream_type& (*__pf)(__ostream_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:108:36: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_ostream<char>::__ostream_type& (*)(std::basic_ostream<char>::__ostream_type&)' {aka 'std::basic_ostream<char>& (*)(std::basic_ostream<char>&)'}
+  108 |       operator<<(__ostream_type& (*__pf)(__ostream_type&))
+      |                  ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:117:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::basic_ostream<_CharT, _Traits>::__ios_type& (*)(std::basic_ostream<_CharT, _Traits>::__ios_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>; std::basic_ostream<_CharT, _Traits>::__ios_type = std::basic_ios<char>]'
+  117 |       operator<<(__ios_type& (*__pf)(__ios_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:117:32: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_ostream<char>::__ios_type& (*)(std::basic_ostream<char>::__ios_type&)' {aka 'std::basic_ios<char>& (*)(std::basic_ios<char>&)'}
+  117 |       operator<<(__ios_type& (*__pf)(__ios_type&))
+      |                  ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:127:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::ios_base& (*)(std::ios_base&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  127 |       operator<<(ios_base& (*__pf) (ios_base&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:127:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::ios_base& (*)(std::ios_base&)'
+  127 |       operator<<(ios_base& (*__pf) (ios_base&))
+      |                  ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:166:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  166 |       operator<<(long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:166:23: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long int'
+  166 |       operator<<(long __n)
+      |                  ~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:170:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  170 |       operator<<(unsigned long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:170:32: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long unsigned int'
+  170 |       operator<<(unsigned long __n)
+      |                  ~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:174:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(bool) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  174 |       operator<<(bool __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:174:23: note:   no known conversion for argument 1 from 'std::vector<char>' to 'bool'
+  174 |       operator<<(bool __n)
+      |                  ~~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:91:5: note: candidate: 'std::basic_ostream<_CharT, _Traits>& std::basic_ostream<_CharT, _Traits>::operator<<(short int) [with _CharT = char; _Traits = std::char_traits<char>]'
+   91 |     basic_ostream<_CharT, _Traits>::
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:92:22: note:   no known conversion for argument 1 from 'std::vector<char>' to 'short int'
+   92 |     operator<<(short __n)
+      |                ~~~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:181:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(short unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  181 |       operator<<(unsigned short __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:181:33: note:   no known conversion for argument 1 from 'std::vector<char>' to 'short unsigned int'
+  181 |       operator<<(unsigned short __n)
+      |                  ~~~~~~~~~~~~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:105:5: note: candidate: 'std::basic_ostream<_CharT, _Traits>& std::basic_ostream<_CharT, _Traits>::operator<<(int) [with _CharT = char; _Traits = std::char_traits<char>]'
+  105 |     basic_ostream<_CharT, _Traits>::
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:106:20: note:   no known conversion for argument 1 from 'std::vector<char>' to 'int'
+  106 |     operator<<(int __n)
+      |                ~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:192:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  192 |       operator<<(unsigned int __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:192:31: note:   no known conversion for argument 1 from 'std::vector<char>' to 'unsigned int'
+  192 |       operator<<(unsigned int __n)
+      |                  ~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:201:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long long int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  201 |       operator<<(long long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:201:28: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long long int'
+  201 |       operator<<(long long __n)
+      |                  ~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:205:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long long unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  205 |       operator<<(unsigned long long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:205:37: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long long unsigned int'
+  205 |       operator<<(unsigned long long __n)
+      |                  ~~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:220:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(double) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  220 |       operator<<(double __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:220:25: note:   no known conversion for argument 1 from 'std::vector<char>' to 'double'
+  220 |       operator<<(double __f)
+      |                  ~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:224:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(float) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  224 |       operator<<(float __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:224:24: note:   no known conversion for argument 1 from 'std::vector<char>' to 'float'
+  224 |       operator<<(float __f)
+      |                  ~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:232:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long double) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  232 |       operator<<(long double __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:232:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long double'
+  232 |       operator<<(long double __f)
+      |                  ~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:245:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(const void*) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  245 |       operator<<(const void* __p)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:245:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'const void*'
+  245 |       operator<<(const void* __p)
+      |                  ~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:250:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::nullptr_t) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>; std::nullptr_t = std::nullptr_t]'
+  250 |       operator<<(nullptr_t)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:250:18: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::nullptr_t'
+  250 |       operator<<(nullptr_t)
+      |                  ^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:119:5: note: candidate: 'std::basic_ostream<_CharT, _Traits>& std::basic_ostream<_CharT, _Traits>::operator<<(std::basic_ostream<_CharT, _Traits>::__streambuf_type*) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__streambuf_type = std::basic_streambuf<char>]'
+  119 |     basic_ostream<_CharT, _Traits>::
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:120:34: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_ostream<char>::__streambuf_type*' {aka 'std::basic_streambuf<char>*'}
+  120 |     operator<<(__streambuf_type* __sbin)
+      |                ~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/string_view:667:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, std::basic_string_view<_CharT, _Traits>)'
+  667 |     operator<<(basic_ostream<_CharT, _Traits>& __os,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:667:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   'std::vector<char>' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6531:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6531 |     operator<<(basic_ostream<_CharT, _Traits>& __os,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6531:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   'std::vector<char>' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/bits/ios_base.h:46,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/system_error:279:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const std::error_code&)'
+  279 |     operator<<(basic_ostream<_CharT, _Traits>& __os, const error_code& __e)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:279:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const std::error_code&'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:513:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, _CharT)'
+  513 |     operator<<(basic_ostream<_CharT, _Traits>& __out, _CharT __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:513:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   deduced conflicting types for parameter '_CharT' ('char' and 'std::vector<char>')
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:518:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, char)'
+  518 |     operator<<(basic_ostream<_CharT, _Traits>& __out, char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:518:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'char'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:524:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, char)'
+  524 |     operator<<(basic_ostream<char, _Traits>& __out, char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:524:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'char'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:530:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, signed char)'
+  530 |     operator<<(basic_ostream<char, _Traits>& __out, signed char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:530:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'signed char'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:535:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, unsigned char)'
+  535 |     operator<<(basic_ostream<char, _Traits>& __out, unsigned char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:535:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'unsigned char'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:594:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const _CharT*)'
+  594 |     operator<<(basic_ostream<_CharT, _Traits>& __out, const _CharT* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:594:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   mismatched types 'const _CharT*' and 'std::vector<char>'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:321:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const char*)'
+  321 |     operator<<(basic_ostream<_CharT, _Traits>& __out, const char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:321:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const char*'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:611:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, const char*)'
+  611 |     operator<<(basic_ostream<char, _Traits>& __out, const char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:611:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const char*'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:624:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, const signed char*)'
+  624 |     operator<<(basic_ostream<char, _Traits>& __out, const signed char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:624:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const signed char*'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:629:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, const unsigned char*)'
+  629 |     operator<<(basic_ostream<char, _Traits>& __out, const unsigned char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:629:5: note:   template argument deduction/substitution failed:
+main.cpp:83:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const unsigned char*'
+   83 |         out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:750:5: note: candidate: 'template<class _Ostream, class _Tp> _Ostream&& std::operator<<(_Ostream&&, const _Tp&)'
+  750 |     operator<<(_Ostream&& __os, const _Tp& __x)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:750:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/ostream: In substitution of 'template<class _Ostream, class _Tp> _Ostream&& std::operator<<(_Ostream&&, const _Tp&) [with _Ostream = std::basic_ofstream<char>&; _Tp = std::vector<char>]':
+main.cpp:83:16:   required from here
+/usr/local/include/c++/11.4.0/ostream:750:5: error: no type named 'type' in 'struct std::enable_if<false, void>'
+main.cpp:89:10: error: 'std::ranges' has not been declared
+   89 |     std::ranges::sort(values, std::greater<>{});
+      |          ^~~~~~
+main.cpp:104:13: error: 'millisecond' was not declared in this scope; did you mean 'milliseconds'?
+  104 |         if (millisecond > 0) {
+      |             ^~~~~~~~~~~
+      |             milliseconds
+main.cpp:107:13: error: no match for 'operator<<' (operand types are 'std::ofstream' {aka 'std::basic_ofstream<char>'} and 'std::vector<char>')
+  107 |         out << buf << "\n";
+      |         ~~~ ^~ ~~~
+      |         |      |
+      |         |      std::vector<char>
+      |         std::ofstream {aka std::basic_ofstream<char>}
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:108:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::basic_ostream<_CharT, _Traits>::__ostream_type& (*)(std::basic_ostream<_CharT, _Traits>::__ostream_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  108 |       operator<<(__ostream_type& (*__pf)(__ostream_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:108:36: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_ostream<char>::__ostream_type& (*)(std::basic_ostream<char>::__ostream_type&)' {aka 'std::basic_ostream<char>& (*)(std::basic_ostream<char>&)'}
+  108 |       operator<<(__ostream_type& (*__pf)(__ostream_type&))
+      |                  ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:117:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::basic_ostream<_CharT, _Traits>::__ios_type& (*)(std::basic_ostream<_CharT, _Traits>::__ios_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>; std::basic_ostream<_CharT, _Traits>::__ios_type = std::basic_ios<char>]'
+  117 |       operator<<(__ios_type& (*__pf)(__ios_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:117:32: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_ostream<char>::__ios_type& (*)(std::basic_ostream<char>::__ios_type&)' {aka 'std::basic_ios<char>& (*)(std::basic_ios<char>&)'}
+  117 |       operator<<(__ios_type& (*__pf)(__ios_type&))
+      |                  ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:127:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::ios_base& (*)(std::ios_base&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  127 |       operator<<(ios_base& (*__pf) (ios_base&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:127:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::ios_base& (*)(std::ios_base&)'
+  127 |       operator<<(ios_base& (*__pf) (ios_base&))
+      |                  ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:166:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  166 |       operator<<(long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:166:23: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long int'
+  166 |       operator<<(long __n)
+      |                  ~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:170:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  170 |       operator<<(unsigned long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:170:32: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long unsigned int'
+  170 |       operator<<(unsigned long __n)
+      |                  ~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:174:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(bool) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  174 |       operator<<(bool __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:174:23: note:   no known conversion for argument 1 from 'std::vector<char>' to 'bool'
+  174 |       operator<<(bool __n)
+      |                  ~~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:91:5: note: candidate: 'std::basic_ostream<_CharT, _Traits>& std::basic_ostream<_CharT, _Traits>::operator<<(short int) [with _CharT = char; _Traits = std::char_traits<char>]'
+   91 |     basic_ostream<_CharT, _Traits>::
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:92:22: note:   no known conversion for argument 1 from 'std::vector<char>' to 'short int'
+   92 |     operator<<(short __n)
+      |                ~~~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:181:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(short unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  181 |       operator<<(unsigned short __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:181:33: note:   no known conversion for argument 1 from 'std::vector<char>' to 'short unsigned int'
+  181 |       operator<<(unsigned short __n)
+      |                  ~~~~~~~~~~~~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:105:5: note: candidate: 'std::basic_ostream<_CharT, _Traits>& std::basic_ostream<_CharT, _Traits>::operator<<(int) [with _CharT = char; _Traits = std::char_traits<char>]'
+  105 |     basic_ostream<_CharT, _Traits>::
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:106:20: note:   no known conversion for argument 1 from 'std::vector<char>' to 'int'
+  106 |     operator<<(int __n)
+      |                ~~~~^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:192:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  192 |       operator<<(unsigned int __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:192:31: note:   no known conversion for argument 1 from 'std::vector<char>' to 'unsigned int'
+  192 |       operator<<(unsigned int __n)
+      |                  ~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:201:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long long int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  201 |       operator<<(long long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:201:28: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long long int'
+  201 |       operator<<(long long __n)
+      |                  ~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:205:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long long unsigned int) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  205 |       operator<<(unsigned long long __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:205:37: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long long unsigned int'
+  205 |       operator<<(unsigned long long __n)
+      |                  ~~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:220:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(double) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  220 |       operator<<(double __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:220:25: note:   no known conversion for argument 1 from 'std::vector<char>' to 'double'
+  220 |       operator<<(double __f)
+      |                  ~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:224:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(float) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  224 |       operator<<(float __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:224:24: note:   no known conversion for argument 1 from 'std::vector<char>' to 'float'
+  224 |       operator<<(float __f)
+      |                  ~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:232:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(long double) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  232 |       operator<<(long double __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:232:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'long double'
+  232 |       operator<<(long double __f)
+      |                  ~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:245:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(const void*) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>]'
+  245 |       operator<<(const void* __p)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:245:30: note:   no known conversion for argument 1 from 'std::vector<char>' to 'const void*'
+  245 |       operator<<(const void* __p)
+      |                  ~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/ostream:250:7: note: candidate: 'std::basic_ostream<_CharT, _Traits>::__ostream_type& std::basic_ostream<_CharT, _Traits>::operator<<(std::nullptr_t) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__ostream_type = std::basic_ostream<char>; std::nullptr_t = std::nullptr_t]'
+  250 |       operator<<(nullptr_t)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:250:18: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::nullptr_t'
+  250 |       operator<<(nullptr_t)
+      |                  ^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:119:5: note: candidate: 'std::basic_ostream<_CharT, _Traits>& std::basic_ostream<_CharT, _Traits>::operator<<(std::basic_ostream<_CharT, _Traits>::__streambuf_type*) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_ostream<_CharT, _Traits>::__streambuf_type = std::basic_streambuf<char>]'
+  119 |     basic_ostream<_CharT, _Traits>::
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:120:34: note:   no known conversion for argument 1 from 'std::vector<char>' to 'std::basic_ostream<char>::__streambuf_type*' {aka 'std::basic_streambuf<char>*'}
+  120 |     operator<<(__streambuf_type* __sbin)
+      |                ~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/string_view:667:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, std::basic_string_view<_CharT, _Traits>)'
+  667 |     operator<<(basic_ostream<_CharT, _Traits>& __os,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:667:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   'std::vector<char>' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6531:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6531 |     operator<<(basic_ostream<_CharT, _Traits>& __os,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6531:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   'std::vector<char>' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/bits/ios_base.h:46,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/system_error:279:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const std::error_code&)'
+  279 |     operator<<(basic_ostream<_CharT, _Traits>& __os, const error_code& __e)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:279:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const std::error_code&'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:513:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, _CharT)'
+  513 |     operator<<(basic_ostream<_CharT, _Traits>& __out, _CharT __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:513:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   deduced conflicting types for parameter '_CharT' ('char' and 'std::vector<char>')
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:518:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, char)'
+  518 |     operator<<(basic_ostream<_CharT, _Traits>& __out, char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:518:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'char'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:524:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, char)'
+  524 |     operator<<(basic_ostream<char, _Traits>& __out, char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:524:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'char'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:530:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, signed char)'
+  530 |     operator<<(basic_ostream<char, _Traits>& __out, signed char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:530:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'signed char'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:535:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, unsigned char)'
+  535 |     operator<<(basic_ostream<char, _Traits>& __out, unsigned char __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:535:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'unsigned char'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:594:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const _CharT*)'
+  594 |     operator<<(basic_ostream<_CharT, _Traits>& __out, const _CharT* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:594:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   mismatched types 'const _CharT*' and 'std::vector<char>'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/ostream:829,
+                 from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:321:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_ostream<_CharT, _Traits>& std::operator<<(std::basic_ostream<_CharT, _Traits>&, const char*)'
+  321 |     operator<<(basic_ostream<_CharT, _Traits>& __out, const char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/ostream.tcc:321:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const char*'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:611:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, const char*)'
+  611 |     operator<<(basic_ostream<char, _Traits>& __out, const char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:611:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const char*'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:624:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, const signed char*)'
+  624 |     operator<<(basic_ostream<char, _Traits>& __out, const signed char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:624:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const signed char*'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:629:5: note: candidate: 'template<class _Traits> std::basic_ostream<char, _Traits>& std::operator<<(std::basic_ostream<char, _Traits>&, const unsigned char*)'
+  629 |     operator<<(basic_ostream<char, _Traits>& __out, const unsigned char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:629:5: note:   template argument deduction/substitution failed:
+main.cpp:107:16: note:   cannot convert 'buf' (type 'std::vector<char>') to type 'const unsigned char*'
+  107 |         out << buf << "\n";
+      |                ^~~
+In file included from /usr/local/include/c++/11.4.0/istream:39,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ostream:750:5: note: candidate: 'template<class _Ostream, class _Tp> _Ostream&& std::operator<<(_Ostream&&, const _Tp&)'
+  750 |     operator<<(_Ostream&& __os, const _Tp& __x)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/ostream:750:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/ostream: In substitution of 'template<class _Ostream, class _Tp> _Ostream&& std::operator<<(_Ostream&&, const _Tp&) [with _Ostream = std::basic_ofstream<char>&; _Tp = std::vector<char>]':
+main.cpp:107:16:   required from here
+/usr/local/include/c++/11.4.0/ostream:750:5: error: no type named 'type' in 'struct std::enable_if<false, void>'
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The code doesn't compile because `in >> buf` reads from a stream and `out << buf` writes to a stream, but the `buf` variable is a `std::vector<char>` instead of a stream or a type convertible to a stream. To fix the code, either use a stream object that can be read from (for reading from `ceas.in`) and written to (for writing to `ceas.out`), or use the correct types in `buf`, for example, `char c` for reading characters, or `std::string str` for reading lines. Since the example doesn's specify which one of these options should be used, here is both.
+
+```cpp
+#include <algorithm>
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace chrono = std::chrono;
+using timer = chrono::steady_clock;
+
+struct Bit {
+    bool value;
+};
+
+struct Digit {
+    std::vector<Bit> bits;
+    static Digit create(unsigned value, unsigned num_bits) {
+        Digit digit;
+        digit.bits.reserve(num_bits);
+        for (unsigned i = 0; i < num_bits; ++i) {
+            unsigned bit_mask = 1u << i;
+            bool bit_value = (value & bit_mask) == bit_mask;
+            digit.bits.push_back({bit_value});
+        }
+        return digit;
+    }
+};
+
+struct Display {
+    std::map<unsigned, Digit> m_digits;
+    unsigned num_columns;
+    void init() {
+        m_digits[0] = Digit::create(0, 2);
+        m_digits[1] = Digit::create(1, 2);
+        m_digits[2] = Digit::create(2, 2);
+        m_digits[3] = Digit::create(3, 3);
+        m_digits[4] = Digit::create(4, 3);
+        m_digits[5] = Digit::create(5, 3);
+        m_digits[6] = Digit::create(6, 4);
+        m_digits[7] = Digit::create(7, 4);
+        m_digits[8] = Digit::create(8, 4);
+        m_digits[9] = Digit::create(9, 4);
+        num_columns = 8;
+    }
+    void update(unsigned value, std::vector<char>& display, unsigned column) {
+        unsigned row = 1;
+        auto const& digit = m_digits[value];
+        for (int i = 2; i >= 0; --i) {
+            const bool bit_value = digit.bits[i].value;
+            const auto code = bit_value ? 'o' : 'x';
+            display[column + row++] = code;
+        }
+        if (millisecond > 0) {
+            display[2] = display[5] = 'o';
+        }
+        display[column * 6 + 3] = ' ';
+    }
+};
+
+int main() {
+    Display display;
+    display.init();
+    timer timer;
+    std::ifstream in("ceas.in");
+    std::ofstream out("ceas.out");
+    std::vector<char> buf(display.num_columns * 6 + 1);
+    unsigned time;
+    in >> time;
+    unsigned milliseconds = time * 100;
+    if (milliseconds == 0) {
+        out << buf << "\n" << buf << "\n" << buf << "\n" << buf << "\n";
+        return 0;
+    }
+    unsigned second = milliseconds / 100;
+    milliseconds %= 100;
+    std::vector<unsigned> values = {milliseconds, second / 60, second / 3600, second / 86400};
+    std::ranges::sort(values, std::greater<>{});
+    for (unsigned v : values) {
+        if (milliseconds == 0 && second > 0) {
+            for (unsigned column = 0; column < display.num_columns; ++column) {
+                buf[column * 6 + 3] = ' ';
+            }
+        }
+        unsigned val = second > 0 ? milliseconds : v;
+        unsigned column = 0;
+        for (int i = 2; i >= 0; --i) {
+            unsigned n = val % 10;
+            display.update(n, buf, column);
+            column += 3;
+            val /= 10;
+        }
+        if (millisecond > 0) {
+            buf[2] = buf[5] = 'o';
+        }
+        out << buf << "\n";
+        if (val == 0) {
+            break;
+        }
+        while (val > 0) {
+            buf[5] = (buf[5] == 'x') ? 'o' : 'x';
+            val--;
+        }
+    }
+    out.close();
+    return 0;
+}
+```

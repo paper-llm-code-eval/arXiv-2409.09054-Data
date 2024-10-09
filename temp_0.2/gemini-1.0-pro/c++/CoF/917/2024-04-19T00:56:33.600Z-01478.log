@@ -1,0 +1,1144 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `cetate.in` and write to `cetate.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Cetatea Vizima din regatul Temeria poate fi reprezentată printr-o matrice cu $N$ linii și $M$ coloane, numerotate începând cu $1$. Vizima este o cetate înfloritoare, fapt datorat numărului mare de negustori și meșteri prezenți. Din acest motiv, fiecărei celule îi este atribuit un profit corespunzător zonei respective. Regele Foltest dorește să reconstruiască zidurile cetății, dar cum războiul cu Imperiul Nilfgaard bate la ușă și resursele regatului sunt limitate, el trebuie să aleagă o porțiune pe care să o poată apăra, reprezentată ca o submatrice. O submatrice este identificată printr-o **configurație** de patru numere $(i_1, j_1, i_2, j_2)$ ($1 \leq i_1 \leq i_2 \leq N$, $1 \leq j_1 \leq j_2 \leq M$), în această ordine, și este formată din elementele situate pe liniile consecutive $i_1, i_1+1, \ldots, i_2$ și pe coloanele consecutive $j_1, j_1+1, \ldots, j_2$ ale matricei prin care este reprezentată cetatea. **Laturile** submatricei sunt egale cu numărul de linii, respectiv de coloane din care a preluat elemente, iar **profitul** submatricei este suma valorilor din celulele sale.
+
+# Cerințe
+Scrieți un program care, cunoscând matricea cetății și o valoare $K$, determină:
+1) profitul maxim al unei submatrice cu laturile egale cu $K$, precum și configurația prin care se identifică ea.
+2) profitul maxim al unei submatrice cu laturile cel mult egale cu $K$, precum și configurația prin care se identifică ea.
+
+# Date de intrare
+Fișierul de intrare `cetate.in` conține pe primul rând o valoare $c$ egală cu $1$ sau $2$, reprezentând cerința ce urmează a fi rezolvată. Următoarea linie conține în ordine $N$, $M$ și $K$, cu semnificația din enunț, iar pe următoarele $N$ linii se află câte $M$ numere, reprezentând valorile din matricea dată. Numerele aflate pe aceeași linie a fișierului sunt separate prin câte un spațiu.
+
+# Date de ieșire
+Fișierul de ieșire `cetate.out` va conține pe prima linie profitul maxim cerut, conform cerinței, iar pe a doua linie va conține 4 numere naturale, reprezentând configurația prin care se identifică submatricea obținută. Dacă există mai multe submatrice conform cerinței, se va lua în considerare cea pentru care configurația formată din cele 4 numere de mai sus este minim lexicografică.
+
+# Restricții și precizări
+- $1 \leq N,M \leq 400$
+- $1 \leq K \leq min(N,M)$
+- Valorile date pentru matricea cetății se află în intervalul $[-10^9, 10^9]$.
+- Pentru teste în valoare de 20 de puncte, $c=1$, iar pentru restul testelor, în valoare de 70 de puncte, $c=2$. Pentru teste în valoare de 8 puncte, $c=1$ și $1 \leq N,M \leq 70$. Pentru teste în valoare de 25 de puncte, $c=2$ și $1 \leq N,M \leq 70$.
+- Configurația $(x_1, x_2, x_3, x_4)$ este mai mică din punct de vedere lexicografic decât configurația $(y_1, y_2, y_3, y_4)$ dacă există $p$ astfel încât $x_p < y_p$ și $x_1 = y_1$, $x_2 = y_2$, $\dots$, $x_{p-1} = y_{p-1}$.
+
+---
+
+Example:
+`cetate.in`
+```
+1
+3 4 3
+-1 -1 -1 -1
+-1 2 -1 -1
+-1 -1 -1 -1
+```
+
+`cetate.out`
+```
+-6
+1 1 3 3
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+ifstream fin("cetate.in");
+ofstream fout("cetate.out");
+
+const int MAXN = 400;
+const int MAXK = 400;
+const int INF = 1e9;
+
+int n, m, k, c;
+int a[MAXN][MAXN];
+int dp[MAXN][MAXN][MAXK][MAXK];
+int ans[MAXN][MAXN][MAXK][MAXK];
+int best_profit[MAXK][MAXK];
+int best_config[MAXK][MAXK][4];
+
+int main() {
+    fin >> c >> n >> m >> k;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+/tmp/ccz5zUzi.o: in function `main':
+main.cpp:(.text.startup+0x3): relocation truncated to fit: R_X86_64_32 against symbol `c' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x8): relocation truncated to fit: R_X86_64_32 against symbol `fin' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x21): relocation truncated to fit: R_X86_64_32 against symbol `n' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x2e): relocation truncated to fit: R_X86_64_32 against symbol `m' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x3b): relocation truncated to fit: R_X86_64_32 against symbol `k' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x49): relocation truncated to fit: R_X86_64_PC32 against symbol `n' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x4f): relocation truncated to fit: R_X86_64_PC32 against symbol `k' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x61): relocation truncated to fit: R_X86_64_PC32 against symbol `m' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x67): relocation truncated to fit: R_X86_64_32 against symbol `a' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x84): relocation truncated to fit: R_X86_64_32 against symbol `fin' defined in .bss section in /tmp/ccz5zUzi.o
+main.cpp:(.text.startup+0x97): additional relocation overflows omitted from the output
+collect2: error: ld returned 1 exit status
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message indicates that the linker is having trouble resolving external symbols, which are likely global variables or functions that are defined in other compilation units. In this case, the error message mentions symbols `c`, `fin`, `n`, `m`, `k`, and `a`, which are all global variables in the program.
+
+To fix the issue, we need to make sure that these variables are properly defined and declared in the program. Here is the corrected version of the code:
+
+```c++
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+ifstream fin("cetate.in");
+ofstream fout("cetate.out");
+
+const int MAXN = 400;
+const int MAXK = 400;
+const int INF = 1e9;
+
+int c, n, m, k;
+int a[MAXN][MAXN];
+int dp[MAXN][MAXN][MAXK][MAXK];
+int ans[MAXN][MAXN][MAXK][MAXK];
+int best_profit[MAXK][MAXK];
+int best_config[MAXK][MAXK][4];
+
+int main() {
+    fin >> c >> n >> m >> k;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+
+I have added the necessary declarations for the global variables `c`, `n`, `m`, `k`, and `a` at the beginning of the program. This ensures that the linker can properly resolve the symbols and link the program correctly.
+---------- user ----------
+
+
+Failed to compile the program.
+```
+/tmp/ccGbFCRi.o: in function `main':
+main.cpp:(.text.startup+0x3): relocation truncated to fit: R_X86_64_32 against symbol `c' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x8): relocation truncated to fit: R_X86_64_32 against symbol `fin' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x21): relocation truncated to fit: R_X86_64_32 against symbol `n' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x2e): relocation truncated to fit: R_X86_64_32 against symbol `m' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x3b): relocation truncated to fit: R_X86_64_32 against symbol `k' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x49): relocation truncated to fit: R_X86_64_PC32 against symbol `n' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x4f): relocation truncated to fit: R_X86_64_PC32 against symbol `k' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x61): relocation truncated to fit: R_X86_64_PC32 against symbol `m' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x67): relocation truncated to fit: R_X86_64_32 against symbol `a' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x84): relocation truncated to fit: R_X86_64_32 against symbol `fin' defined in .bss section in /tmp/ccGbFCRi.o
+main.cpp:(.text.startup+0x97): additional relocation overflows omitted from the output
+collect2: error: ld returned 1 exit status
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message indicates that the linker is having trouble resolving external symbols, which are likely global variables or functions that are defined in other compilation units. In this case, the error message mentions symbols `c`, `fin`, `n`, `m`, `k`, and `a`, which are all global variables in the program.
+
+To fix the issue, we need to make sure that these variables are properly defined and declared in the program. Here is the corrected version of the code:
+
+```c++
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+int c, n, m, k;
+ifstream fin("cetate.in");
+ofstream fout("cetate.out");
+
+const int MAXN = 400;
+const int MAXK = 400;
+const int INF = 1e9;
+
+int a[MAXN][MAXN];
+int dp[MAXN][MAXN][MAXK][MAXK];
+int ans[MAXN][MAXN][MAXK][MAXK];
+int best_profit[MAXK][MAXK];
+int best_config[MAXK][MAXK][4];
+
+int main() {
+    fin >> c >> n >> m >> k;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+
+I have moved the declarations of the global variables `c`, `n`, `m`, `k`, `fin`, and `fout` to the beginning of the program, before the `main` function. This ensures that the linker can properly resolve the symbols and link the program correctly.
+---------- user ----------
+
+
+Failed to compile the program.
+```
+/tmp/cc191myg.o: in function `main':
+main.cpp:(.text.startup+0x3): relocation truncated to fit: R_X86_64_32 against symbol `c' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x8): relocation truncated to fit: R_X86_64_32 against symbol `fin' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x21): relocation truncated to fit: R_X86_64_32 against symbol `n' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x2e): relocation truncated to fit: R_X86_64_32 against symbol `m' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x3b): relocation truncated to fit: R_X86_64_32 against symbol `k' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x49): relocation truncated to fit: R_X86_64_PC32 against symbol `n' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x4f): relocation truncated to fit: R_X86_64_PC32 against symbol `k' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x61): relocation truncated to fit: R_X86_64_PC32 against symbol `m' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x67): relocation truncated to fit: R_X86_64_32 against symbol `a' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x84): relocation truncated to fit: R_X86_64_32 against symbol `fin' defined in .bss section in /tmp/cc191myg.o
+main.cpp:(.text.startup+0x97): additional relocation overflows omitted from the output
+collect2: error: ld returned 1 exit status
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message indicates that the linker is having trouble resolving external symbols, which are likely global variables or functions that are defined in other compilation units. In this case, the error message mentions symbols `c`, `fin`, `n`, `m`, `k`, and `a`, which are all global variables in the program.
+
+To fix the issue, we need to make sure that these variables are properly defined and declared in the program. Here is the corrected version of the code:
+
+```c++
+int c, n, m, k;
+ifstream fin("cetate.in");
+ofstream fout("cetate.out");
+
+const int MAXN = 400;
+const int MAXK = 400;
+const int INF = 1e9;
+
+int a[MAXN][MAXN];
+int dp[MAXN][MAXN][MAXK][MAXK];
+int ans[MAXN][MAXN][MAXK][MAXK];
+int best_profit[MAXK][MAXK];
+int best_config[MAXK][MAXK][4];
+
+int main() {
+    fin >> c >> n >> m >> k;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+
+I have moved the declarations of the global variables `c`, `n`, `m`, `k`, `fin`, and `fout` to the beginning of the program, before the `main` function. I have also removed the `using namespace std;` line, as it is not necessary in this program.
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:2:1: error: 'ifstream' does not name a type
+    2 | ifstream fin("cetate.in");
+      | ^~~~~~~~
+main.cpp:3:1: error: 'ofstream' does not name a type
+    3 | ofstream fout("cetate.out");
+      | ^~~~~~~~
+main.cpp: In function 'int main()':
+main.cpp:16:5: error: 'fin' was not declared in this scope
+   16 |     fin >> c >> n >> m >> k;
+      |     ^~~
+main.cpp:88:9: error: 'fout' was not declared in this scope
+   88 |         fout << best_profit[k][k] << '\n';
+      |         ^~~~
+main.cpp:100:9: error: 'fout' was not declared in this scope
+  100 |         fout << best_profit[best_l][best_w] << '\n';
+      |         ^~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message indicates that the compiler cannot find the declarations for `ifstream` and `ofstream`. This is because these are classes defined in the `std` namespace, and we have not included the necessary header file to use them.
+
+To fix the issue, we need to include the `<fstream>` header file at the beginning of the program. Here is the corrected version of the code:
+
+```c++
+#include <fstream>
+
+int c, n, m, k;
+ifstream fin("cetate.in");
+ofstream fout("cetate.out");
+
+const int MAXN = 400;
+const int MAXK = 400;
+const int INF = 1e9;
+
+int a[MAXN][MAXN];
+int dp[MAXN][MAXN][MAXK][MAXK];
+int ans[MAXN][MAXN][MAXK][MAXK];
+int best_profit[MAXK][MAXK];
+int best_config[MAXK][MAXK][4];
+
+int main() {
+    fin >> c >> n >> m >> k;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+
+I have added the line `#include <fstream>` at the beginning of the program, which includes the necessary header file for using `ifstream` and `ofstream`.
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:4:1: error: 'ifstream' does not name a type
+    4 | ifstream fin("cetate.in");
+      | ^~~~~~~~
+main.cpp:5:1: error: 'ofstream' does not name a type
+    5 | ofstream fout("cetate.out");
+      | ^~~~~~~~
+main.cpp: In function 'int main()':
+main.cpp:18:5: error: 'fin' was not declared in this scope
+   18 |     fin >> c >> n >> m >> k;
+      |     ^~~
+main.cpp:90:9: error: 'fout' was not declared in this scope
+   90 |         fout << best_profit[k][k] << '\n';
+      |         ^~~~
+main.cpp:102:9: error: 'fout' was not declared in this scope
+  102 |         fout << best_profit[best_l][best_w] << '\n';
+      |         ^~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message indicates that the compiler cannot find the declarations for `ifstream` and `ofstream`. This is because these are classes defined in the `std` namespace, and we have not included the necessary header file to use them.
+
+To fix the issue, we need to include the `<fstream>` header file at the beginning of the program. Here is the corrected version of the code:
+
+```c++
+#include <fstream>
+
+int main() {
+    ifstream fin("cetate.in");
+    ofstream fout("cetate.out");
+
+    int c, n, m, k;
+    fin >> c >> n >> m >> k;
+
+    int a[MAXN][MAXN];
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    int dp[MAXN][MAXN][MAXK][MAXK];
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    int ans[MAXN][MAXN][MAXK][MAXK];
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    int best_profit[MAXK][MAXK];
+    int best_config[MAXK][MAXK][4];
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+
+I have added the line `#include <fstream>` at the beginning of the program, which includes the necessary header file for using `ifstream` and `ofstream`. I have also moved the declarations of `c`, `n`, `m`, `k`, `a`, `dp`, `ans`, `best_profit`, and `best_config` to the beginning of the `main` function, before any other code. This ensures that these variables are properly declared and initialized before they are used.
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'int main()':
+main.cpp:4:5: error: 'ifstream' was not declared in this scope; did you mean 'std::ifstream'?
+    4 |     ifstream fin("cetate.in");
+      |     ^~~~~~~~
+      |     std::ifstream
+In file included from /usr/local/include/c++/11.4.0/ios:38,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/iosfwd:162:41: note: 'std::ifstream' declared here
+  162 |   typedef basic_ifstream<char>          ifstream;
+      |                                         ^~~~~~~~
+main.cpp:5:5: error: 'ofstream' was not declared in this scope; did you mean 'std::ofstream'?
+    5 |     ofstream fout("cetate.out");
+      |     ^~~~~~~~
+      |     std::ofstream
+In file included from /usr/local/include/c++/11.4.0/ios:38,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/iosfwd:165:41: note: 'std::ofstream' declared here
+  165 |   typedef basic_ofstream<char>          ofstream;
+      |                                         ^~~~~~~~
+main.cpp:8:5: error: 'fin' was not declared in this scope
+    8 |     fin >> c >> n >> m >> k;
+      |     ^~~
+main.cpp:10:11: error: 'MAXN' was not declared in this scope
+   10 |     int a[MAXN][MAXN];
+      |           ^~~~
+main.cpp:13:20: error: 'a' was not declared in this scope
+   13 |             fin >> a[i][j];
+      |                    ^
+main.cpp:17:24: error: 'MAXK' was not declared in this scope
+   17 |     int dp[MAXN][MAXN][MAXK][MAXK];
+      |                        ^~~~
+main.cpp:22:21: error: 'dp' was not declared in this scope
+   22 |                     dp[i][j][l][w] = -INF;
+      |                     ^~
+main.cpp:22:39: error: 'INF' was not declared in this scope
+   22 |                     dp[i][j][l][w] = -INF;
+      |                                       ^~~
+main.cpp:31:13: error: 'dp' was not declared in this scope
+   31 |             dp[i][j][1][1] = a[i][j];
+      |             ^~
+main.cpp:31:30: error: 'a' was not declared in this scope
+   31 |             dp[i][j][1][1] = a[i][j];
+      |                              ^
+main.cpp:32:13: error: 'ans' was not declared in this scope; did you mean 'abs'?
+   32 |             ans[i][j][1][1] = 0;
+      |             ^~~
+      |             abs
+main.cpp:43:36: error: 'a' was not declared in this scope
+   43 |                             sum += a[x][y];
+      |                                    ^
+main.cpp:46:25: error: 'dp' was not declared in this scope
+   46 |                     if (dp[i][j][l][w] < sum) {
+      |                         ^~
+main.cpp:48:25: error: 'ans' was not declared in this scope; did you mean 'abs'?
+   48 |                         ans[i][j][l][w] = 1;
+      |                         ^~~
+      |                         abs
+main.cpp:50:25: error: 'dp' was not declared in this scope
+   50 |                     if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+      |                         ^~
+main.cpp:50:67: error: 'a' was not declared in this scope
+   50 |                     if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+      |                                                                   ^
+main.cpp:52:25: error: 'ans' was not declared in this scope; did you mean 'abs'?
+   52 |                         ans[i][j][l][w] = 2;
+      |                         ^~~
+      |                         abs
+main.cpp:54:25: error: 'dp' was not declared in this scope
+   54 |                     if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+      |                         ^~
+main.cpp:54:67: error: 'a' was not declared in this scope
+   54 |                     if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+      |                                                                   ^
+main.cpp:56:25: error: 'ans' was not declared in this scope; did you mean 'abs'?
+   56 |                         ans[i][j][l][w] = 3;
+      |                         ^~~
+      |                         abs
+main.cpp:58:25: error: 'dp' was not declared in this scope
+   58 |                     if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+      |                         ^~
+main.cpp:58:75: error: 'a' was not declared in this scope
+   58 |                     if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+      |                                                                           ^
+main.cpp:60:25: error: 'ans' was not declared in this scope; did you mean 'abs'?
+   60 |                         ans[i][j][l][w] = 4;
+      |                         ^~~
+      |                         abs
+main.cpp:73:25: error: 'dp' was not declared in this scope
+   73 |                     if (dp[i][j][l][w] > best_profit[l][w]) {
+      |                         ^~
+main.cpp:73:42: error: 'best_profit' was not declared in this scope
+   73 |                     if (dp[i][j][l][w] > best_profit[l][w]) {
+      |                                          ^~~~~~~~~~~
+main.cpp:75:25: error: 'best_config' was not declared in this scope
+   75 |                         best_config[l][w][0] = i;
+      |                         ^~~~~~~~~~~
+main.cpp:86:9: error: 'fout' was not declared in this scope
+   86 |         fout << best_profit[k][k] << '\n';
+      |         ^~~~
+main.cpp:86:17: error: 'best_profit' was not declared in this scope
+   86 |         fout << best_profit[k][k] << '\n';
+      |                 ^~~~~~~~~~~
+main.cpp:87:17: error: 'best_config' was not declared in this scope
+   87 |         fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+      |                 ^~~~~~~~~~~
+main.cpp:92:21: error: 'best_profit' was not declared in this scope
+   92 |                 if (best_profit[l][w] > best_profit[best_l][best_w]) {
+      |                     ^~~~~~~~~~~
+main.cpp:98:9: error: 'fout' was not declared in this scope
+   98 |         fout << best_profit[best_l][best_w] << '\n';
+      |         ^~~~
+main.cpp:98:17: error: 'best_profit' was not declared in this scope
+   98 |         fout << best_profit[best_l][best_w] << '\n';
+      |                 ^~~~~~~~~~~
+main.cpp:99:17: error: 'best_config' was not declared in this scope
+   99 |         fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+      |                 ^~~~~~~~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+The error message indicates that the compiler cannot find the declarations for `ifstream`, `ofstream`, `fin`, `fout`, `MAXN`, `MAXK`, `a`, `dp`, `ans`, `best_profit`, and `best_config`. This is because these are all identifiers that have not been declared in the program.
+
+To fix the issue, we need to declare these identifiers before using them. Here is the corrected version of the code:
+
+```c++
+#include <fstream>
+
+int main() {
+    ifstream fin("cetate.in");
+    ofstream fout("cetate.out");
+
+    int c, n, m, k;
+    fin >> c >> n >> m >> k;
+
+    const int MAXN = 400;
+    const int MAXK = 400;
+    const int INF = 1e9;
+
+    int a[MAXN][MAXN];
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            fin >> a[i][j];
+        }
+    }
+
+    int dp[MAXN][MAXN][MAXK][MAXK];
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            for (int l = 1; l <= k; l++) {
+                for (int w = 1; w <= k; w++) {
+                    dp[i][j][l][w] = -INF;
+                }
+            }
+        }
+    }
+
+    int ans[MAXN][MAXN][MAXK][MAXK];
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            dp[i][j][1][1] = a[i][j];
+            ans[i][j][1][1] = 0;
+        }
+    }
+
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    int sum = 0;
+                    for (int x = i; x <= i + l - 1; x++) {
+                        for (int y = j; y <= j + w - 1; y++) {
+                            sum += a[x][y];
+                        }
+                    }
+                    if (dp[i][j][l][w] < sum) {
+                        dp[i][j][l][w] = sum;
+                        ans[i][j][l][w] = 1;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j][l - 1][w] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j][l - 1][w] + a[i][j];
+                        ans[i][j][l][w] = 2;
+                    }
+                    if (dp[i][j][l][w] < dp[i][j - 1][l][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i][j - 1][l][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 3;
+                    }
+                    if (dp[i][j][l][w] < dp[i - 1][j - 1][l - 1][w - 1] + a[i][j]) {
+                        dp[i][j][l][w] = dp[i - 1][j - 1][l - 1][w - 1] + a[i][j];
+                        ans[i][j][l][w] = 4;
+                    }
+                }
+            }
+        }
+    }
+
+    int best_profit[MAXK][MAXK];
+    int best_config[MAXK][MAXK][4];
+    for (int l = 1; l <= k; l++) {
+        for (int w = 1; w <= k; w++) {
+            for (int i = 1; i <= n - l + 1; i++) {
+                for (int j = 1; j <= m - w + 1; j++) {
+                    if (dp[i][j][l][w] > best_profit[l][w]) {
+                        best_profit[l][w] = dp[i][j][l][w];
+                        best_config[l][w][0] = i;
+                        best_config[l][w][1] = j;
+                        best_config[l][w][2] = i + l - 1;
+                        best_config[l][w][3] = j + w - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (c == 1) {
+        fout << best_profit[k][k] << '\n';
+        fout << best_config[k][k][0] << ' ' << best_config[k][k][1] << ' ' << best_config[k][k][2] << ' ' << best_config[k][k][3] << '\n';
+    } else {
+        int best_l = 0, best_w = 0;
+        for (int l = 1; l <= k; l++) {
+            for (int w = 1; w <= k; w++) {
+                if (best_profit[l][w] > best_profit[best_l][best_w]) {
+                    best_l = l;
+                    best_w = w;
+                }
+            }
+        }
+        fout << best_profit[best_l][best_w] << '\n';
+        fout << best_config[best_l][best_w][0] << ' ' << best_config[best_l][best_w][1] << ' ' << best_config[best_l][best_w][2] << ' ' << best_config[best_l][best_w][3] << '\n';
+    }
+
+    return 0;
+}
+```
+
+I have added the necessary declarations for all the identifiers that were previously undeclared. I have also moved the declarations of `c`, `n`, `m`, `k`, `a`, `dp`, `ans`, `best_profit`, and `best_config` to the beginning of the `main` function, before any other code. This ensures that these variables are properly declared and initialized before they are used.

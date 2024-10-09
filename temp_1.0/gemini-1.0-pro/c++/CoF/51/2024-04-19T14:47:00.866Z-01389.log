@@ -1,0 +1,1106 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `lant.in` and write to `lant.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Ion este un lingvist pasionat. Recent el a descoperit un text scris într-o limbă necunoscută. Textul este scris pe mai multe linii şi este format din cuvinte scrise cu litere mici din alfabetul latin, separate prin spaţii sau/şi semne de punctuaţie (`,:;.!?-`).
+
+Ion a fost frapat că există multe similitudini între cuvintele din text. Fiind foarte riguros, Ion defineşte similitudinea a două cuvinte după cum urmează.
+
+Fie $c_1$ şi $c_2$ două cuvinte. Cuvântul $c_1$ poate fi obţinut din cuvântul $c_2$ printr-o succesiune de operaţii elementare. Operaţiile elementare ce pot fi folosite sunt:
+* ștergerea unui caracter
+* inserarea unui caracter
+* modificarea unui caracter
+
+Definim similitudinea dintre $c_1$ şi $c_2$ ca fiind numărul minim de operaţii aplicate cuvântului $c_1$ pentru a ajunge la cuvântul $c_2$.
+
+Fie $c_0$ primul cuvânt din text. Începând cu $c_0$ putem construi lanţuri de $k$-similitudine. 
+
+Un lanţ de $k$-similitudine este o succesiune de cuvinte distincte din text cu următoarele proprietăţi:
+- dacă cuvântul $x$ apare în lanţ înaintea cuvântului $y$, atunci prima apariţie a lui $x$ în text precedă prima apariţie a lui $y$ în text;
+- dacă $x$ şi $y$ sunt cuvinte consecutive în lanţ (în ordinea $x\ y$) , atunci similitudinea dintre $x$ şi $y$ este $≤k$;
+- lanţul este maximal (adică nu putem adăuga încă un cuvânt la sfârşitul acestui lanţ, astfel încât să fie respectate proprietăţile precedente).
+
+# Cerinţă
+Scrieţi un program care să determine numărul de lanţuri de $k$-similitudine care încep cu $c_0$.
+
+# Date de intrare
+Fişierul de intrare `lant.in` conţine pe prima linie valoarea $k$. Pe următoarele linii se află textul dat.
+
+# Date de ieşire
+Fişierul de ieşire `lant.out` va conţine o singură linie pe care va fi scris numărul de lanţuri de $k$-similitudine care încep cu $c_0$.
+
+# Restricţii
+* Lungimea unei linii din text nu depăşeşte $1\ 000$ de caractere.
+* Lungimea unui cuvânt nu depăşeşte $30$ de caractere.
+* Numărul total de cuvinte $≤ 150$.
+* Pentru datele de test, numărul de lanţuri de $k$-similitudine care încep cu $c_0$ va fi $≤ 2\ 000\ 000\ 000$.
+* Enunțul a fost modificat
+
+---
+
+Example:
+`lant.in`
+```
+5
+ana are mere, banane,
+pere si castane.
+```
+
+`lant.out`
+```
+6
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <set>
+#include <vector>
+
+#define uchar unsigned char
+
+using namespace std;
+
+struct character;
+struct pattern;
+struct word;
+
+inline size_t hash_(uchar v) {
+  return (v - '0') & 63;
+};
+inline size_t hash_(uchar v, uchar f) {
+  return ((v - '0') ^ (f << 2)) & 63;
+};
+inline size_t word_hash(const word& v) {
+  return hash_((v.st & 15), (v.st >> 4));
+};
+inline size_t pattern_hash(const pattern& v) {
+  return hash_(v.st);
+};
+inline size_t character_hash(const character& v) {
+  return hash_(v.st, v.sn);
+};
+inline bool operator<(const word& a, const word& b) { return a.st < b.st; }
+inline bool operator<(const pattern& a, const pattern& b) { return a.st < b.st; }
+inline bool operator<(const character& a, const character& b) {
+  return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+};
+
+typedef vector<uint16_t> pattern_list;
+typedef map<pattern, pattern_list> patterns_map;
+typedef map<word, patterns_map> words_map;
+typedef set<character> characters_set;
+typedef vector<character> characters_vector;
+typedef vector<word> words_vector;
+typedef map<character, uint16_t> pos_map;
+typedef pair<character, uint16_t> pos_pair;
+typedef long long uword;
+
+const size_t MAX_LINE = 1000;
+const size_t MAX_WORD_LEN = 30;
+const size_t MAX_WORDS = 150;
+
+const uchar EOS = MAX_CHAR + 1;
+
+struct character {
+  uchar st; // char: 0-62
+  uchar sn; // n-th occ in word
+};
+struct word {
+  uint16_t st; // 1st char hash
+  uint16_t en; // last char hash
+};
+struct pattern {
+  uint16_t st;     // 1st char hash
+  uint16_t en;     // last char hash
+  uint16_t seq;    // order of occurence
+  uint16_t length; // pattern size
+};
+
+static const int32_t pos_step[3][2] = {{-1, 0}, {0, -1}, {1, 0}};
+static uint16_t n_patterns = 0;
+static uint16_t first_length = 0;
+static uint16_t last_length = 0;
+static patterns_map patterns_by_word;
+static patterns_map patterns_from_char;
+static words_vector words;
+static characters_set characters;
+static characters_vector characters_vec;
+static pos_map pos;
+static uint16_t n_words;
+
+static pattern get_pattern(const word& w) {
+  uint16_t st;
+  uint16_t en;
+  if (w.st != w.en) {
+    st = hash_(w.st & 15);
+    en = hash_(w.en >> 4);
+  } else {
+    st = en = hash_(w.st);
+  }
+  return pattern{st, en, n_patterns++, words.size() - 1ULL / (1ULL << 16)};
+}
+
+static void populate_patterns() {
+  uint16_t index = 0;
+  for (word& x : words) {
+    const pattern pat = get_pattern(x);
+    const pattern& p = pat;
+    patterns_by_word[x][p] = pattern_list();
+    patterns_from_char[p][x] = pattern_list();
+    characters_set::iterator it = characters.insert(character{p.st, index++}).first;
+    pos[character{p.st, index}] = pos[character{p.en, index}] = 0;
+  }
+  characters.insert(character{EOS, index});
+  pos[character{EOS, index}] = 0;
+}
+
+inline uint16_t relate(uint16_t a, uint16_t b) {
+  return (a - b) * ((a - b) > 0) ? (a - b) / 2 : ((a - b) < 0) ? (a - b) / 2 - 1 : 0;
+}
+
+inline size_t distance(const pattern& a, const pattern& b, uint16_t k) {
+  if (a.st == b.st)
+    return relate(a.en, b.en) <= k;
+  else
+    return relate(a.en, b.st) + relate(a.st, b.en) <= k;
+}
+
+inline size_t distance(const character& a, const character& b) {
+  if (a.st == b.st)
+    return a.sn == b.sn;
+  else
+    return 1;
+}
+
+inline void writer(uword k, const characters_vector& last) {
+  if (k)
+    for (const character& c : last) {
+      const pattern& from = get_pattern(words[c.seq]);
+      if (pos[c] < patterns_from_char[from][words[c.seq]].size() &&
+          distance(from, patterns_from_char[from][words[c.seq]][pos[c]], k - 1) == 1) {
+        characters_vector l = last;
+        l.push_back(c);
+        write(k - 1, l);
+      }
+    }
+  else {
+    for (const character& c : characters)
+      if (pos[c] < patterns_from_char[get_pattern(words[c.seq])][words[c.seq]].size()) {
+        characters_vector l = last;
+        l.push_back(c);
+        if (l.size() - 1 > last_length) {
+          last_length = l.size() - 1;
+          cout << last_length << "\n";
+        }
+        write(k, l);
+      }
+  }
+}
+
+int main() {
+  cin.sync_with_stdio(false);
+  cout.sync_with_stdio(false);
+  uint16_t k, wl = 0, nr = 0;
+  uword ans = 0;
+  char c = '3';
+  while (cin >> k) {
+    first_length = 0;
+    last_length = 0;
+    pos.clear();
+    words.clear();
+    characters.clear();
+    characters_vec.clear();
+    patterns_by_word.clear();
+    patterns_from_char.clear();
+    words_map w_m;
+    pos_map w_p;
+    c = static_cast<char>(cin.get());
+    c = static_cast<char>(toupper(c));
+    while (c != '\n') {
+      c = static_cast<char>(toupper(c));
+      if (c < 'A' || c > 'Z' || nr > MAX_WORD_LEN) {
+        if (nr > 2) {
+          word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(wl), c}]};
+          words.push_back(w);
+        }
+        wl = 0;
+        nr = 0;
+      } else {
+        auto w = w_m.insert(make_pair(c, ++wl));
+        w_p[wl][{static_cast<uchar>(wl), c}] = ++nr;
+        pos[character{hash_(c), wl}] = patterns_from_char[get_pattern(w.first)][w.first].size();
+        patterns_from_char[get_pattern(w.first)][w.first].push_back(character{hash_(c), wl});
+        ++wl;
+      }
+      c = static_cast<char>(cin.get());
+      c = static_cast<char>(toupper(c));
+    }
+    if (nr > 2) {
+      word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <set>
+#include <vector>
+
+#define uchar unsigned char
+
+using namespace std;
+
+struct character;
+struct pattern;
+struct word;
+
+inline size_t hash_(uchar v) {
+  return (v - '0') & 63;
+};
+inline size_t hash_(uchar v, uchar f) {
+  return ((v - '0') ^ (f << 2)) & 63;
+};
+inline size_t word_hash(const word& v) {
+  return hash_((v.st & 15), (v.st >> 4));
+};
+inline size_t pattern_hash(const pattern& v) {
+  return hash_(v.st);
+};
+inline size_t character_hash(const character& v) {
+  return hash_(v.st, v.sn);
+};
+inline bool operator<(const word& a, const word& b) { return a.st < b.st; }
+inline bool operator<(const pattern& a, const pattern& b) { return a.st < b.st; }
+inline bool operator<(const character& a, const character& b) {
+  return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+};
+
+typedef vector<uint16_t> pattern_list;
+typedef map<pattern, pattern_list> patterns_map;
+typedef map<word, patterns_map> words_map;
+typedef set<character> characters_set;
+typedef vector<character> characters_vector;
+typedef vector<word> words_vector;
+typedef map<character, uint16_t> pos_map;
+typedef pair<character, uint16_t> pos_pair;
+typedef long long uword;
+
+const size_t MAX_LINE = 1000;
+const size_t MAX_WORD_LEN = 30;
+const size_t MAX_WORDS = 150;
+
+const uchar EOS = MAX_CHAR + 1;
+
+struct character {
+  uchar st; // char: 0-62
+  uchar sn; // n-th occ in word
+};
+struct word {
+  uint16_t st; // 1st char hash
+  uint16_t en; // last char hash
+};
+struct pattern {
+  uint16_t st;     // 1st char hash
+  uint16_t en;     // last char hash
+  uint16_t seq;    // order of occurence
+  uint16_t length; // pattern size
+};
+
+static const int32_t pos_step[3][2] = {{-1, 0}, {0, -1}, {1, 0}};
+static uint16_t n_patterns = 0;
+static uint16_t first_length = 0;
+static uint16_t last_length = 0;
+static patterns_map patterns_by_word;
+static patterns_map patterns_from_char;
+static words_vector words;
+static characters_set characters;
+static characters_vector characters_vec;
+static pos_map pos;
+static uint16_t n_words;
+
+static pattern get_pattern(const word& w) {
+  uint16_t st;
+  uint16_t en;
+  if (w.st != w.en) {
+    st = hash_(w.st & 15);
+    en = hash_(w.en >> 4);
+  } else {
+    st = en = hash_(w.st);
+  }
+  return pattern{st, en, n_patterns++, words.size() - 1ULL / (1ULL << 16)};
+}
+
+static void populate_patterns() {
+  uint16_t index = 0;
+  for (word& x : words) {
+    const pattern pat = get_pattern(x);
+    const pattern& p = pat;
+    patterns_by_word[x][p] = pattern_list();
+    patterns_from_char[p][x] = pattern_list();
+    characters_set::iterator it = characters.insert(character{p.st, index++}).first;
+    pos[character{p.st, index}] = pos[character{p.en, index}] = 0;
+  }
+  characters.insert(character{EOS, index});
+  pos[character{EOS, index}] = 0;
+}
+
+inline uint16_t relate(uint16_t a, uint16_t b) {
+  return (a - b) * ((a - b) > 0) ? (a - b) / 2 : ((a - b) < 0) ? (a - b) / 2 - 1 : 0;
+}
+
+inline size_t distance(const pattern& a, const pattern& b, uint16_t k) {
+  if (a.st == b.st)
+    return relate(a.en, b.en) <= k;
+  else
+    return relate(a.en, b.st) + relate(a.st, b.en) <= k;
+}
+
+inline size_t distance(const character& a, const character& b) {
+  if (a.st == b.st)
+    return a.sn == b.sn;
+  else
+    return 1;
+}
+
+inline void writer(uword k, const characters_vector& last) {
+  if (k)
+    for (const character& c : last) {
+      const pattern& from = get_pattern(words[c.seq]);
+      if (pos[c] < patterns_from_char[from][words[c.seq]].size() &&
+          distance(from, patterns_from_char[from][words[c.seq]][pos[c]], k - 1) == 1) {
+        characters_vector l = last;
+        l.push_back(c);
+        write(k - 1, l);
+      }
+    }
+  else {
+    for (const character& c : characters)
+      if (pos[c] < patterns_from_char[get_pattern(words[c.seq])][words[c.seq]].size()) {
+        characters_vector l = last;
+        l.push_back(c);
+        if (l.size() - 1 > last_length) {
+          last_length = l.size() - 1;
+          cout << last_length << "\n";
+        }
+        write(k, l);
+      }
+  }
+}
+
+int main() {
+  cin.sync_with_stdio(false);
+  cout.sync_with_stdio(false);
+  uint16_t k, wl = 0, nr = 0;
+  uword ans = 0;
+  char c = '3';
+  while (cin >> k) {
+    first_length = 0;
+    last_length = 0;
+    pos.clear();
+    words.clear();
+    characters.clear();
+    characters_vec.clear();
+    patterns_by_word.clear();
+    patterns_from_char.clear();
+    words_map w_m;
+    pos_map w_p;
+    c = static_cast<char>(cin.get());
+    c = static_cast<char>(toupper(c));
+    while (c != '\n') {
+      c = static_cast<char>(toupper(c));
+      if (c < 'A' || c > 'Z' || nr > MAX_WORD_LEN) {
+        if (nr > 2) {
+          word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(wl), c}]};
+          words.push_back(w);
+        }
+        wl = 0;
+        nr = 0;
+      } else {
+        auto w = w_m.insert(make_pair(c, ++wl));
+        w_p[wl][{static_cast<uchar>(wl), c}] = ++nr;
+        pos[character{hash_(c), wl}] = patterns_from_char[get_pattern(w.first)][w.first].size();
+        patterns_from_char[get_pattern(w.first)][w.first].push_back(character{hash_(c), wl});
+        ++wl;
+      }
+      c = static_cast<char>(cin.get());
+      c = static_cast<char>(toupper(c));
+    }
+    if (nr > 2) {
+      word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(```c++
+#include <vector>
+#include <string>
+#include <unordered_map>
+#include <fstream>
+
+using namespace std;
+
+const int max_n = 155, max_len = 35, max_k = 35;
+vector <string> dict;
+int n, k, f[max_n][max_len][max_k][2];
+
+bool check(string &a, string &b) {
+   if(a.size() != b.size()) return 0;
+   int cnt = 0;
+   for(int i = 0; i < (int)a.size(); i++)
+    if(a[i] != b[i]) cnt++;
+   return cnt <= k;
+}
+
+int solve(int pos, int len, int k_rem, int ok) {
+   if(pos == n) {
+      if(ok) return 1;
+      else return 0;
+   }
+   if(~f[pos][len][k_rem][ok]) return f[pos][len][k_rem][ok];
+   f[pos][len][k_rem][ok] = 0;
+   for(int i = 0; i < (int)dict[pos].size(); i++) {
+      if(i != 0) {
+         if(check(dict[pos].substr(0, i), dict[pos].substr(i, dict[pos].size()))) {
+            f[pos][len][k_rem][ok] += solve(pos, i + 1, k_rem, 0);
+         }
+      }
+      if(len + (int) dict[pos].size() - i <= 30) {
+         if(k_rem >= (int)dict[pos].size() - i) {
+            f[pos][len][k_rem][ok] += solve(pos + 1, len + (int) dict[pos].size() - i, k_rem - ((int)dict[pos].size() - i), 1);
+         }
+         else { f[pos][len][k_rem][ok] += solve(pos + 1, len + (int) dict[pos].size() - i, 0, 1); }
+      }
+   }
+   return f[pos][len][k_rem][ok];
+}
+
+int main() {
+   ifstream fin("lant.in");
+   ofstream fout("lant.out");
+   fin >> k;
+   string aux;
+   while(getline(fin, aux)) {
+      int st_pos = 0;
+      for(int i = 0; i < (int)aux.size(); i++) {
+         if(aux[i] == ' ' || aux[i] == ',' || aux[i] == ';' || aux[i] == ':' || aux[i] == '.' || aux[i] == '?' ||
+            aux[i] == '!' || aux[i] == '-' || aux[i] == '\n') {
+            dict.push_back(aux.substr(st_pos, i - st_pos));
+            st_pos = i + 1;
+         }
+      }
+      dict.push_back(aux.substr(st_pos, aux.size() - st_pos));
+   }
+   n = dict.size();
+   memset(f, -1, sizeof f);
+   fout << solve(0, 0, k, 0) << '\n';
+   return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'size_t word_hash(const word&)':
+main.cpp:22:17: error: invalid use of incomplete type 'const struct word'
+   22 |   return hash_((v.st & 15), (v.st >> 4));
+      |                 ^
+main.cpp:13:8: note: forward declaration of 'struct word'
+   13 | struct word;
+      |        ^~~~
+main.cpp:22:30: error: invalid use of incomplete type 'const struct word'
+   22 |   return hash_((v.st & 15), (v.st >> 4));
+      |                              ^
+main.cpp:13:8: note: forward declaration of 'struct word'
+   13 | struct word;
+      |        ^~~~
+main.cpp: In function 'size_t pattern_hash(const pattern&)':
+main.cpp:25:16: error: invalid use of incomplete type 'const struct pattern'
+   25 |   return hash_(v.st);
+      |                ^
+main.cpp:12:8: note: forward declaration of 'struct pattern'
+   12 | struct pattern;
+      |        ^~~~~~~
+main.cpp: In function 'size_t character_hash(const character&)':
+main.cpp:28:16: error: invalid use of incomplete type 'const struct character'
+   28 |   return hash_(v.st, v.sn);
+      |                ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp:28:22: error: invalid use of incomplete type 'const struct character'
+   28 |   return hash_(v.st, v.sn);
+      |                      ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp: In function 'bool operator<(const word&, const word&)':
+main.cpp:30:62: error: invalid use of incomplete type 'const struct word'
+   30 | inline bool operator<(const word& a, const word& b) { return a.st < b.st; }
+      |                                                              ^
+main.cpp:13:8: note: forward declaration of 'struct word'
+   13 | struct word;
+      |        ^~~~
+main.cpp:30:69: error: invalid use of incomplete type 'const struct word'
+   30 | inline bool operator<(const word& a, const word& b) { return a.st < b.st; }
+      |                                                                     ^
+main.cpp:13:8: note: forward declaration of 'struct word'
+   13 | struct word;
+      |        ^~~~
+main.cpp: In function 'bool operator<(const pattern&, const pattern&)':
+main.cpp:31:68: error: invalid use of incomplete type 'const struct pattern'
+   31 | inline bool operator<(const pattern& a, const pattern& b) { return a.st < b.st; }
+      |                                                                    ^
+main.cpp:12:8: note: forward declaration of 'struct pattern'
+   12 | struct pattern;
+      |        ^~~~~~~
+main.cpp:31:75: error: invalid use of incomplete type 'const struct pattern'
+   31 | inline bool operator<(const pattern& a, const pattern& b) { return a.st < b.st; }
+      |                                                                           ^
+main.cpp:12:8: note: forward declaration of 'struct pattern'
+   12 | struct pattern;
+      |        ^~~~~~~
+main.cpp: In function 'bool operator<(const character&, const character&)':
+main.cpp:33:11: error: invalid use of incomplete type 'const struct character'
+   33 |   return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+      |           ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp:33:18: error: invalid use of incomplete type 'const struct character'
+   33 |   return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+      |                  ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp:33:29: error: invalid use of incomplete type 'const struct character'
+   33 |   return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+      |                             ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp:33:37: error: invalid use of incomplete type 'const struct character'
+   33 |   return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+      |                                     ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp:33:47: error: invalid use of incomplete type 'const struct character'
+   33 |   return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+      |                                               ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp:33:54: error: invalid use of incomplete type 'const struct character'
+   33 |   return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+      |                                                      ^
+main.cpp:11:8: note: forward declaration of 'struct character'
+   11 | struct character;
+      |        ^~~~~~~~~
+main.cpp: At global scope:
+main.cpp:50:19: error: 'MAX_CHAR' was not declared in this scope
+   50 | const uchar EOS = MAX_CHAR + 1;
+      |                   ^~~~~~~~
+main.cpp: In function 'pattern get_pattern(const word&)':
+main.cpp:88:53: warning: narrowing conversion of '(((long long unsigned int)words.std::vector<word>::size()) - (1 / (1 << 16)))' from 'long long unsigned int' to 'uint16_t' {aka 'short unsigned int'} [-Wnarrowing]
+   88 |   return pattern{st, en, n_patterns++, words.size() - 1ULL / (1ULL << 16)};
+      |                                        ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+main.cpp: In function 'void populate_patterns()':
+main.cpp:96:21: error: no match for 'operator[]' (operand types are 'patterns_map' {aka 'std::map<pattern, std::vector<short unsigned int> >'} and 'word')
+   96 |     patterns_by_word[x][p] = pattern_list();
+      |                     ^
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = pattern; _Tp = std::vector<short unsigned int>; _Compare = std::less<pattern>; _Alloc = std::allocator<std::pair<const pattern, std::vector<short unsigned int> > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::vector<short unsigned int>; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = pattern]'
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from 'word' to 'const key_type&' {aka 'const pattern&'}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = pattern; _Tp = std::vector<short unsigned int>; _Compare = std::less<pattern>; _Alloc = std::allocator<std::pair<const pattern, std::vector<short unsigned int> > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::vector<short unsigned int>; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = pattern]'
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from 'word' to 'std::map<pattern, std::vector<short unsigned int> >::key_type&&' {aka 'pattern&&'}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+main.cpp:97:26: error: no match for 'operator[]' (operand types are 'std::map<pattern, std::vector<short unsigned int> >::mapped_type' {aka 'std::vector<short unsigned int>'} and 'word')
+   97 |     patterns_from_char[p][x] = pattern_list();
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from /usr/local/include/c++/11.4.0/functional:62,
+                 from /usr/local/include/c++/11.4.0/pstl/glue_algorithm_defs.h:13,
+                 from /usr/local/include/c++/11.4.0/algorithm:74,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1043:7: note: candidate: 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = short unsigned int; _Alloc = std::allocator<short unsigned int>; std::vector<_Tp, _Alloc>::reference = short unsigned int&; std::vector<_Tp, _Alloc>::size_type = long unsigned int]'
+ 1043 |       operator[](size_type __n) _GLIBCXX_NOEXCEPT
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1043:28: note:   no known conversion for argument 1 from 'word' to 'std::vector<short unsigned int>::size_type' {aka 'long unsigned int'}
+ 1043 |       operator[](size_type __n) _GLIBCXX_NOEXCEPT
+      |                  ~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1061:7: note: candidate: 'std::vector<_Tp, _Alloc>::const_reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) const [with _Tp = short unsigned int; _Alloc = std::allocator<short unsigned int>; std::vector<_Tp, _Alloc>::const_reference = const short unsigned int&; std::vector<_Tp, _Alloc>::size_type = long unsigned int]'
+ 1061 |       operator[](size_type __n) const _GLIBCXX_NOEXCEPT
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1061:28: note:   no known conversion for argument 1 from 'word' to 'std::vector<short unsigned int>::size_type' {aka 'long unsigned int'}
+ 1061 |       operator[](size_type __n) const _GLIBCXX_NOEXCEPT
+      |                  ~~~~~~~~~~^~~
+main.cpp:98:65: warning: narrowing conversion of '(uint16_t)p.pattern::st' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+   98 |     characters_set::iterator it = characters.insert(character{p.st, index++}).first;
+      |                                                               ~~^~
+main.cpp:98:74: warning: narrowing conversion of '(index ++)' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+   98 |     characters_set::iterator it = characters.insert(character{p.st, index++}).first;
+      |                                                                     ~~~~~^~
+main.cpp:99:21: warning: narrowing conversion of '(uint16_t)p.pattern::st' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+   99 |     pos[character{p.st, index}] = pos[character{p.en, index}] = 0;
+      |                   ~~^~
+main.cpp:99:25: warning: narrowing conversion of 'index' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+   99 |     pos[character{p.st, index}] = pos[character{p.en, index}] = 0;
+      |                         ^~~~~
+main.cpp:99:51: warning: narrowing conversion of '(uint16_t)p.pattern::en' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+   99 |     pos[character{p.st, index}] = pos[character{p.en, index}] = 0;
+      |                                                 ~~^~
+main.cpp:99:55: warning: narrowing conversion of 'index' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+   99 |     pos[character{p.st, index}] = pos[character{p.en, index}] = 0;
+      |                                                       ^~~~~
+main.cpp:101:36: warning: narrowing conversion of 'index' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+  101 |   characters.insert(character{EOS, index});
+      |                                    ^~~~~
+main.cpp:102:22: warning: narrowing conversion of 'index' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+  102 |   pos[character{EOS, index}] = 0;
+      |                      ^~~~~
+main.cpp: In function 'void writer(uword, const characters_vector&)':
+main.cpp:126:49: error: 'const struct character' has no member named 'seq'
+  126 |       const pattern& from = get_pattern(words[c.seq]);
+      |                                                 ^~~
+main.cpp:127:53: error: 'const struct character' has no member named 'seq'
+  127 |       if (pos[c] < patterns_from_char[from][words[c.seq]].size() &&
+      |                                                     ^~~
+main.cpp:128:59: error: 'const struct character' has no member named 'seq'
+  128 |           distance(from, patterns_from_char[from][words[c.seq]][pos[c]], k - 1) == 1) {
+      |                                                           ^~~
+main.cpp:131:9: error: 'write' was not declared in this scope; did you mean 'writer'?
+  131 |         write(k - 1, l);
+      |         ^~~~~
+      |         writer
+main.cpp:136:59: error: 'const struct character' has no member named 'seq'
+  136 |       if (pos[c] < patterns_from_char[get_pattern(words[c.seq])][words[c.seq]].size()) {
+      |                                                           ^~~
+main.cpp:136:74: error: 'const struct character' has no member named 'seq'
+  136 |       if (pos[c] < patterns_from_char[get_pattern(words[c.seq])][words[c.seq]].size()) {
+      |                                                                          ^~~
+main.cpp:143:9: error: 'write' was not declared in this scope; did you mean 'writer'?
+  143 |         write(k, l);
+      |         ^~~~~
+      |         writer
+main.cpp: In function 'int main()':
+main.cpp:171:21: error: no match for 'operator[]' (operand types are 'words_map' {aka 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >'} and 'uint16_t' {aka 'short unsigned int'})
+  171 |           word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(wl), c}]};
+      |                     ^
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::map<pattern, std::vector<short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = word]'
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'const key_type&' {aka 'const word&'}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::map<pattern, std::vector<short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = word]'
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >::key_type&&' {aka 'word&&'}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+main.cpp:171:59: error: no match for 'operator[]' (operand types are 'pos_map' {aka 'std::map<character, short unsigned int>'} and 'uint16_t' {aka 'short unsigned int'})
+  171 |           word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(wl), c}]};
+      |                                                           ^
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = character; _Tp = short unsigned int; _Compare = std::less<character>; _Alloc = std::allocator<std::pair<const character, short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = short unsigned int; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = character]'
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'const key_type&' {aka 'const character&'}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = character; _Tp = short unsigned int; _Compare = std::less<character>; _Alloc = std::allocator<std::pair<const character, short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = short unsigned int; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = character]'
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'std::map<character, short unsigned int>::key_type&&' {aka 'character&&'}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+main.cpp:177:28: error: no matching function for call to 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >::insert(std::pair<char, short unsigned int>)'
+  177 |         auto w = w_m.insert(make_pair(c, ++wl));
+      |                  ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:816:9: note: candidate: 'template<class _Pair> std::__enable_if_t<std::is_constructible<std::pair<const _Key, _Tp>, _Pair>::value, std::pair<typename std::_Rb_tree<_Key, std::pair<const _Key, _Tp>, std::_Select1st<std::pair<const _Key, _Tp> >, _Compare, typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other>::iterator, bool> > std::map<_Key, _Tp, _Compare, _Alloc>::insert(_Pair&&) [with _Pair = _Pair; _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >]'
+  816 |         insert(_Pair&& __x)
+      |         ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:816:9: note:   template argument deduction/substitution failed:
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/utility:70,
+                 from /usr/local/include/c++/11.4.0/algorithm:60,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<bool _Cond, class _Tp> using __enable_if_t = typename std::enable_if::type [with bool _Cond = false; _Tp = std::pair<std::_Rb_tree_iterator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, bool>]':
+/usr/local/include/c++/11.4.0/bits/stl_map.h:816:2:   required by substitution of 'template<class _Pair> std::__enable_if_t<std::is_constructible<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, _Pair>::value, std::pair<std::_Rb_tree_iterator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, bool> > std::map<word, std::map<pattern, std::vector<short unsigned int> > >::insert<_Pair>(_Pair&&) [with _Pair = std::pair<char, short unsigned int>]'
+main.cpp:177:28:   required from here
+/usr/local/include/c++/11.4.0/type_traits:2205:11: error: no type named 'type' in 'struct std::enable_if<false, std::pair<std::_Rb_tree_iterator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, bool> >'
+ 2205 |     using __enable_if_t = typename enable_if<_Cond, _Tp>::type;
+      |           ^~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:875:9: note: candidate: 'template<class _Pair> std::__enable_if_t<std::is_constructible<std::pair<const _Key, _Tp>, _Pair>::value, typename std::_Rb_tree<_Key, std::pair<const _Key, _Tp>, std::_Select1st<std::pair<const _Key, _Tp> >, _Compare, typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other>::iterator> std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator, _Pair&&) [with _Pair = _Pair; _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >]'
+  875 |         insert(const_iterator __position, _Pair&& __x)
+      |         ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:875:9: note:   template argument deduction/substitution failed:
+main.cpp:177:28: note:   candidate expects 2 arguments, 1 provided
+  177 |         auto w = w_m.insert(make_pair(c, ++wl));
+      |                  ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:893:9: note: candidate: 'template<class _InputIterator> void std::map<_Key, _Tp, _Compare, _Alloc>::insert(_InputIterator, _InputIterator) [with _InputIterator = _InputIterator; _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >]'
+  893 |         insert(_InputIterator __first, _InputIterator __last)
+      |         ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:893:9: note:   template argument deduction/substitution failed:
+main.cpp:177:28: note:   candidate expects 2 arguments, 1 provided
+  177 |         auto w = w_m.insert(make_pair(c, ++wl));
+      |                  ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:629:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::insert_return_type std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::map<_Key, _Tp, _Compare, _Alloc>::node_type&&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::insert_return_type = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::insert_return_type; std::map<_Key, _Tp, _Compare, _Alloc>::node_type = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::node_type]'
+  629 |       insert(node_type&& __nh)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:629:26: note:   no known conversion for argument 1 from 'std::pair<char, short unsigned int>' to 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >::node_type&&' {aka 'std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::node_type&&'}
+  629 |       insert(node_type&& __nh)
+      |              ~~~~~~~~~~~~^~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:634:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::iterator std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator, std::map<_Key, _Tp, _Compare, _Alloc>::node_type&&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::iterator; std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::const_iterator; std::map<_Key, _Tp, _Compare, _Alloc>::node_type = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::node_type]'
+  634 |       insert(const_iterator __hint, node_type&& __nh)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:634:7: note:   candidate expects 2 arguments, 1 provided
+/usr/local/include/c++/11.4.0/bits/stl_map.h:803:7: note: candidate: 'std::pair<typename std::_Rb_tree<_Key, std::pair<const _Key, _Tp>, std::_Select1st<std::pair<const _Key, _Tp> >, _Compare, typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other>::iterator, bool> std::map<_Key, _Tp, _Compare, _Alloc>::insert(const value_type&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; typename std::_Rb_tree<_Key, std::pair<const _Key, _Tp>, std::_Select1st<std::pair<const _Key, _Tp> >, _Compare, typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other>::iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::iterator; typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> > = __gnu_cxx::__alloc_traits<std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >::rebind<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; typename _Allocator::value_type = std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >; std::map<_Key, _Tp, _Compare, _Alloc>::value_type = std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >]'
+  803 |       insert(const value_type& __x)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:803:32: note:   no known conversion for argument 1 from 'std::pair<char, short unsigned int>' to 'const value_type&' {aka 'const std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >&'}
+  803 |       insert(const value_type& __x)
+      |              ~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:810:7: note: candidate: 'std::pair<typename std::_Rb_tree<_Key, std::pair<const _Key, _Tp>, std::_Select1st<std::pair<const _Key, _Tp> >, _Compare, typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other>::iterator, bool> std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::map<_Key, _Tp, _Compare, _Alloc>::value_type&&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; typename std::_Rb_tree<_Key, std::pair<const _Key, _Tp>, std::_Select1st<std::pair<const _Key, _Tp> >, _Compare, typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other>::iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::iterator; typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> >::other = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; typename __gnu_cxx::__alloc_traits<_Allocator>::rebind<std::pair<const _Key, _Tp> > = __gnu_cxx::__alloc_traits<std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >::rebind<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; typename _Allocator::value_type = std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >; std::map<_Key, _Tp, _Compare, _Alloc>::value_type = std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >]'
+  810 |       insert(value_type&& __x)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:810:27: note:   no known conversion for argument 1 from 'std::pair<char, short unsigned int>' to 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >::value_type&&' {aka 'std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >&&'}
+  810 |       insert(value_type&& __x)
+      |              ~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:830:7: note: candidate: 'void std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::initializer_list<std::pair<const _Key, _Tp> >) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >]'
+  830 |       insert(std::initializer_list<value_type> __list)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:830:48: note:   no known conversion for argument 1 from 'std::pair<char, short unsigned int>' to 'std::initializer_list<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >'
+  830 |       insert(std::initializer_list<value_type> __list)
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:860:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::iterator std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator, const value_type&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::iterator; std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::const_iterator; std::map<_Key, _Tp, _Compare, _Alloc>::value_type = std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >]'
+  860 |       insert(const_iterator __position, const value_type& __x)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:860:7: note:   candidate expects 2 arguments, 1 provided
+/usr/local/include/c++/11.4.0/bits/stl_map.h:870:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::iterator std::map<_Key, _Tp, _Compare, _Alloc>::insert(std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator, std::map<_Key, _Tp, _Compare, _Alloc>::value_type&&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::iterator; std::map<_Key, _Tp, _Compare, _Alloc>::const_iterator = std::_Rb_tree<word, std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >, std::_Select1st<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >, std::less<word>, std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > > >::const_iterator; std::map<_Key, _Tp, _Compare, _Alloc>::value_type = std::pair<const word, std::map<pattern, std::vector<short unsigned int> > >]'
+  870 |       insert(const_iterator __position, value_type&& __x)
+      |       ^~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:870:7: note:   candidate expects 2 arguments, 1 provided
+main.cpp:178:12: error: no match for 'operator[]' (operand types are 'pos_map' {aka 'std::map<character, short unsigned int>'} and 'uint16_t' {aka 'short unsigned int'})
+  178 |         w_p[wl][{static_cast<uchar>(wl), c}] = ++nr;
+      |            ^
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = character; _Tp = short unsigned int; _Compare = std::less<character>; _Alloc = std::allocator<std::pair<const character, short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = short unsigned int; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = character]'
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'const key_type&' {aka 'const character&'}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = character; _Tp = short unsigned int; _Compare = std::less<character>; _Alloc = std::allocator<std::pair<const character, short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = short unsigned int; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = character]'
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'std::map<character, short unsigned int>::key_type&&' {aka 'character&&'}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+main.cpp:179:28: warning: narrowing conversion of 'hash_(((int)((unsigned char)c)))' from 'size_t' {aka 'long unsigned int'} to 'unsigned char' [-Wnarrowing]
+  179 |         pos[character{hash_(c), wl}] = patterns_from_char[get_pattern(w.first)][w.first].size();
+      |                       ~~~~~^~~
+main.cpp:179:33: warning: narrowing conversion of 'wl' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+  179 |         pos[character{hash_(c), wl}] = patterns_from_char[get_pattern(w.first)][w.first].size();
+      |                                 ^~
+main.cpp:180:84: warning: narrowing conversion of 'hash_(((int)((unsigned char)c)))' from 'size_t' {aka 'long unsigned int'} to 'unsigned char' [-Wnarrowing]
+  180 |         patterns_from_char[get_pattern(w.first)][w.first].push_back(character{hash_(c), wl});
+      |                                                                               ~~~~~^~~
+main.cpp:180:89: warning: narrowing conversion of 'wl' from 'uint16_t' {aka 'short unsigned int'} to 'unsigned char' [-Wnarrowing]
+  180 |         patterns_from_char[get_pattern(w.first)][w.first].push_back(character{hash_(c), wl});
+      |                                                                                         ^~
+main.cpp:187:17: error: no match for 'operator[]' (operand types are 'words_map' {aka 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >'} and 'uint16_t' {aka 'short unsigned int'})
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                 ^
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::map<pattern, std::vector<short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = word]'
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'const key_type&' {aka 'const word&'}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = word; _Tp = std::map<pattern, std::vector<short unsigned int> >; _Compare = std::less<word>; _Alloc = std::allocator<std::pair<const word, std::map<pattern, std::vector<short unsigned int> > > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::map<pattern, std::vector<short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = word]'
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'std::map<word, std::map<pattern, std::vector<short unsigned int> > >::key_type&&' {aka 'word&&'}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+main.cpp:187:55: error: no match for 'operator[]' (operand types are 'pos_map' {aka 'std::map<character, short unsigned int>'} and 'uint16_t' {aka 'short unsigned int'})
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                       ^
+In file included from /usr/local/include/c++/11.4.0/map:61,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = character; _Tp = short unsigned int; _Compare = std::less<character>; _Alloc = std::allocator<std::pair<const character, short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = short unsigned int; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = character]'
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'const key_type&' {aka 'const character&'}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:7: note: candidate: 'std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = character; _Tp = short unsigned int; _Compare = std::less<character>; _Alloc = std::allocator<std::pair<const character, short unsigned int> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = short unsigned int; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = character]'
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from 'uint16_t' {aka 'short unsigned int'} to 'std::map<character, short unsigned int>::key_type&&' {aka 'character&&'}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+main.cpp:187:80: error: expected primary-expression at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                                                ^
+main.cpp:187:80: error: expected ')' at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                                                ^
+      |                                                                                )
+main.cpp:187:80: error: expected '}' at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                            ~                   ^
+main.cpp:187:80: error: expected ']' at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                                                ^
+      |                                                                                ]
+main.cpp:187:80: error: expected '}' at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |             ~                                                                  ^
+main.cpp:187:80: error: expected ',' or ';' at end of input
+main.cpp:187:80: error: expected '}' at end of input
+main.cpp:186:17: note: to match this '{'
+  186 |     if (nr > 2) {
+      |                 ^
+main.cpp:187:80: error: expected '}' at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                                                ^
+main.cpp:154:20: note: to match this '{'
+  154 |   while (cin >> k) {
+      |                    ^
+main.cpp:187:80: error: expected '}' at end of input
+  187 |       word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(
+      |                                                                                ^
+main.cpp:148:12: note: to match this '{'
+  148 | int main() {
+      |            ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <set>
+#include <vector>
+
+#define uchar unsigned char
+
+using namespace std;
+
+struct character;
+struct pattern;
+struct word;
+
+inline size_t hash_(uchar v) {
+  return (v - '0') & 63;
+};
+inline size_t hash_(uchar v, uchar f) {
+  return ((v - '0') ^ (f << 2)) & 63;
+};
+inline size_t word_hash(const word& v) {
+  return hash_((v.st & 15), (v.st >> 4));
+};
+inline size_t pattern_hash(const pattern& v) {
+  return hash_(v.st);
+};
+inline size_t character_hash(const character& v) {
+  return hash_(v.st, v.sn);
+};
+inline bool operator<(const word& a, const word& b) { return a.st < b.st; }
+inline bool operator<(const pattern& a, const pattern& b) { return a.st < b.st; }
+inline bool operator<(const character& a, const character& b) {
+  return (a.st < b.st) || ((a.st == b.st) && (a.sn < b.sn));
+};
+
+typedef vector<uint16_t> pattern_list;
+typedef map<pattern, pattern_list> patterns_map;
+typedef map<word, patterns_map> words_map;
+typedef set<character> characters_set;
+typedef vector<character> characters_vector;
+typedef map<character, uint16_t> pos_map;
+typedef pair<character, uint16_t> pos_pair;
+typedef long long uword;
+
+const size_t MAX_LINE = 1000;
+const size_t MAX_WORD_LEN = 30;
+const size_t MAX_WORDS = 150;
+
+const uchar EOS = MAX_CHAR + 1;
+
+static const int32_t pos_step[3][2] = {{-1, 0}, {0, -1}, {1, 0}};
+static uint16_t n_patterns = 0;
+static uint16_t first_length = 0;
+static uint16_t last_length = 0;
+static patterns_map patterns_by_word;
+static patterns_map patterns_from_char;
+static words_vector words;
+static characters_set characters;
+static characters_vector characters_vec;
+static pos_map pos;
+static uint16_t n_words;
+
+static pattern get_pattern(const word& w) {
+  uint16_t st;
+  uint16_t en;
+  if (w.st != w.en) {
+    st = hash_(w.st & 15);
+    en = hash_(w.en >> 4);
+  } else {
+    st = en = hash_(w.st);
+  }
+  return pattern{st, en, n_patterns++, words.size() - 1ULL / (1ULL << 16)};
+}
+
+static void populate_patterns() {
+  uint16_t index = 0;
+  for (word& x : words) {
+    const pattern pat = get_pattern(x);
+    const pattern& p = pat;
+    patterns_by_word[x][p] = pattern_list();
+    patterns_from_char[p][x] = pattern_list();
+    characters_set::iterator it = characters.insert(character{p.st, index++}).first;
+    pos[character{p.st, index}] = patterns_from_char[p][x].size();
+    patterns_from_char[p][x].push_back(character{p.st, index});
+    ++wl;
+  }
+  characters.insert(character{EOS, index});
+  pos[character{EOS, index}] = 0;
+}
+
+inline uint16_t relate(uint16_t a, uint16_t b) {
+  return (a - b) * ((a - b) > 0) ? (a - b) / 2 : ((a - b) < 0) ? (a - b) / 2 - 1 : 0;
+}
+
+inline size_t distance(const pattern& a, const pattern& b, uint16_t k) {
+  if (a.st == b.st)
+    return relate(a.en, b.en) <= k;
+  else
+    return relate(a.en, b.st) + relate(a.st, b.en) <= k;
+}
+
+inline size_t distance(const character& a, const character& b) {
+  if (a.st == b.st)
+    return a.sn == b.sn;
+  else
+    return 1;
+}
+
+inline void writer(uword k, const characters_vector& last) {
+  if (k)
+    for (const character& c : last) {
+      const pattern& from = get_pattern(words[c.seq]);
+      if (pos[c] < patterns_from_char[from][words[c.seq]].size() &&
+          distance(from, patterns_from_char[from][words[c.seq]][pos[c]], k - 1) == 1) {
+        characters_vector l = last;
+        l.push_back(c);
+        write(k - 1, l);
+      }
+    }
+  else {
+    for (const character& c : characters)
+      if (pos[c] < patterns_from_char[get_pattern(words[c.seq])][words[c.seq]].size()) {
+        characters_vector l = last;
+        l.push_back(c);
+        if (l.size() - 1 > last_length) {
+          last_length = l.size() - 1;
+          cout << last_length << "\n";
+        }
+        write(k, l);
+      }
+  }
+}
+
+int main() {
+  cin.sync_with_stdio(false);
+  cout.sync_with_stdio(false);
+  uint16_t k, wl = 0, nr = 0;
+  uword ans = 0;
+  char c = '3';
+  while (cin >> k) {
+    first_length = 0;
+    last_length = 0;
+    pos.clear();
+    words.clear();
+    characters.clear();
+    characters_vec.clear();
+    patterns_by_word.clear();
+    patterns_from_char.clear();
+    words_map w_m;
+    pos_map w_p;
+    c = static_cast<char>(toupper(c));
+    while (c != '\n') {
+      c = static_cast<char>(toupper(c));
+      if (c < 'A' || c > 'Z' || nr > MAX_WORD_LEN) {
+        if (nr > 2) {
+          word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(wl), c}]};
+          words.push_back(w);
+        }
+        wl = 0;
+        nr = 0;
+      } else {
+        auto w = w_m.insert(make_pair(c, ++wl));
+        w_p[wl][{static_cast<uchar>(wl), c}] = ++nr;
+        ++wl;
+      }
+      c = static_cast<char>(cin.get());
+      c = static_cast<char>(toupper(c));
+    }
+    if (nr > 2) {
+      word w{w_m[wl][{static_cast<uchar>(wl), c}], w_p[wl][{static_cast<uchar>(wl), c}]};
+      words.push_back(w);
+    }
+    populate_patterns();
+    for (int i = 0; i < words.size(); i++) { cout << word_hash(words[i]) << "\n"; }
+    writer(k, characters_vector{});
+    cout << ans << "\n";
+    break;
+  }
+  return 0;
+}
+```

@@ -1,0 +1,2873 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `numerus.in` and write to `numerus.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+~[numerus.png|align=right]
+
+La ora de matematică distractivă, domnul profesor Numerus propune elevilor săi să completeze cu numere naturale o grilă cu $6$ coloane numerotate cu literele $A$, $B$, $C$, $D$, $E$ şi $F$ şi cu un număr infinit de linii. Grila va fi completată cu numere naturale, începând cu numărul $1$. Pe liniile impare completarea se va face de la stânga la dreapta, iar pe cele pare de la dreapta la stânga. Ultimul număr de pe o linie va fi identic cu penultimul număr (în sensul completării) de pe aceeaşi linie.
+
+În figura alăturată aveţi completate primele $7$ linii ale grilei.
+
+Deoarece pe tablă sau pe o foaie de hârtie numărul de linii este limitat, deci grila poate fi efectiv completată doar pentru un număr mic de linii, domnul profesor Numerus doreşte ca elevii săi să determine, cu ajutorul calculatorului, imaginea unei anumite linii a grilei şi locul sau locurile pe care se poate afla un număr natural dat.
+
+# Cerință
+
+Deduceţi regula după care se completează linia $k$ a grilei şi scrieţi un program care să citească numerele naturale $k$ şi $n$ şi care să determine:
+
+a) numerele naturale de pe linia $k$, vizualizate de la stânga la dreapta;
+b) linia pe care se află în grilă numărul natural $n$;
+c) coloana sau coloanele pe care se află în grilă numărul natural $n$.
+
+# Date de intrare
+
+Fișierul de intrare `numerus.in` conține o singură linie pe care sunt scrise două numere naturale $k$ şi $n$, separate printr-un spaţiu.
+
+
+# Date de ieșire
+
+Fișierul de ieșire `numerus.out` va conține $3$ linii:
+
+* pe prima linie, se vor scrie numerele de pe linia $k$ a grilei;
+* pe a doua linie, se va scrie un număr natural reprezentând linia pe care se află în grilă numărul natural $n$;
+* pe a treia linie, se va scrie litera sau literele care reprezintă coloana, respectiv coloanele pe care se află în grilă numărul natural $n$; în situaţia în care avem de afişat două litere acestea se vor afişa cu un spaţiu între ele.
+* Pentru rezolvarea cerinţei a) se acordă 40% din punctaj, pentru cerinţa b) 30% din punctaj şi pentru cerinţa c) 30% din punctaj.
+
+
+# Restricții și precizări
+
+* $5 \leq k < 2 \cdot 10^8$;
+* $1 \leq n < 10^9$;
+
+---
+
+Example:
+`numerus.in`
+```
+10 40
+```
+
+`numerus.out`
+```
+50 50 49 48 47 46
+8
+A B
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <cstdio>
+#include <cstdlib>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+} solve("numerus.out");
+
+constexpr uintN lg2_limit = 10;
+constexpr uintN limit = 1'000'000'000;
+constexpr uintN limit_increment = limit / 2;
+constexpr uintN m_max = 6;
+constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uintN n_bits, uintN max_bits> struct knowledge {
+    uintN m_n_bits = n_bits;
+    uintN m_l_bits = m_max - n_bits;
+    uintN m_max_masks = uintN(1) << uintN(m_max_bits);
+    using uintPage = uintN;
+    using uintLine = uintN;
+    using uintMask = uintN;
+    using uintN = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uintLine{0});
+    }
+
+    void fill_masks(uintLine line) const {
+        uintN k = bit_set >> (m_l_bits), l = line & ((uintN(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uintN(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uintPage page, uintMask mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uintN(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uintN(1) << tpage;
+            pages[tpage] |= uintN(1) << page;
+        }
+    }
+
+    void set_page(uintPage page) {
+        pages[page] |= uintN(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uintPage left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+            if (right == 0) right = (uintN(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uintN(1) << left;
+        if (right > 0) pages[right] |= uintN(1) << right;
+    }
+
+    bool contain_page(uintPage page, uintPage base = 0) const {
+        uintMask mask = uintN(1) << (base + limit_increment) | uintN(1) << (page + limit_increment);
+        uintN all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uintN mpages = 0;
+    uintN all_pages = 0;
+    std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uintMask, uintMask> fill_masks;
+    uintN all_masks = 0;
+};
+
+struct action {
+    virtual uintN next(uintN i) = 0;
+    virtual uintN at(uintN i) = 0;
+    virtual uintN previous(uintN i) = 0;
+    virtual uintN max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uintN next(uintN i) override { return i + bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i - bit_set; }
+    uintN max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uintN next(uintN i) override { return i - bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i + bit_set; }
+    uintN max() const override { return limit_increment - bit_set; }
+};
+
+template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+template <> uintN k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uintN page_bits> struct learn {
+    static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uintN max_pages = 2 * (limit + 1);
+    struct index {
+        uintN l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uintN, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uintN l, uintN m, uintN r) {
+        index i{l, m, r};
+        auto findex = known_tables.find(i);
+        if (findex != known_tables.cend()) {
+            return {l, findex->second, r};
+        } else {
+            return {l, limit, r};
+        }
+    }
+    bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+        return s > m - know.m_l_bits && s <= m;
+    }
+    void update_index(index& i, uintN d, uintN m) {
+        uintN um = i.m;
+        i.m = m;
+        if (within_index(d, i.l, um, i.r)) {
+            i.l = m;
+        }
+        if (within_index(d, i.l, i.m, um)) {
+            i.r = m;
+        }
+    }
+    index merge_index(index& i, index& j) {
+        index o = {i.l, i.m, i.r};
+        if (j.m > o.m) {
+            
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <cstdio>
+#include <cstdlib>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+} solve("numerus.out");
+
+constexpr uintN lg2_limit = 10;
+constexpr uintN limit = 1'000'000'000;
+constexpr uintN limit_increment = limit / 2;
+constexpr uintN m_max = 6;
+constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uintN n_bits, uintN max_bits> struct knowledge {
+    uintN m_n_bits = n_bits;
+    uintN m_l_bits = m_max - n_bits;
+    uintN m_max_masks = uintN(1) << uintN(m_max_bits);
+    using uintPage = uintN;
+    using uintLine = uintN;
+    using uintMask = uintN;
+    using uintN = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uintLine{0});
+    }
+
+    void fill_masks(uintLine line) const {
+        uintN k = bit_set >> (m_l_bits), l = line & ((uintN(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uintN(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uintPage page, uintMask mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uintN(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uintN(1) << tpage;
+            pages[tpage] |= uintN(1) << page;
+        }
+    }
+
+    void set_page(uintPage page) {
+        pages[page] |= uintN(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uintPage left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+            if (right == 0) right = (uintN(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uintN(1) << left;
+        if (right > 0) pages[right] |= uintN(1) << right;
+    }
+
+    bool contain_page(uintPage page, uintPage base = 0) const {
+        uintMask mask = uintN(1) << (base + limit_increment) | uintN(1) << (page + limit_increment);
+        uintN all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uintN mpages = 0;
+    uintN all_pages = 0;
+    std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uintMask, uintMask> fill_masks;
+    uintN all_masks = 0;
+};
+
+struct action {
+    virtual uintN next(uintN i) = 0;
+    virtual uintN at(uintN i) = 0;
+    virtual uintN previous(uintN i) = 0;
+    virtual uintN max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uintN next(uintN i) override { return i + bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i - bit_set; }
+    uintN max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uintN next(uintN i) override { return i - bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i + bit_set; }
+    uintN max() const override { return limit_increment - bit_set; }
+};
+
+template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+template <> uintN k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uintN page_bits> struct learn {
+    static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uintN max_pages = 2 * (limit + 1);
+    struct index {
+        uintN l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uintN, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uintN l, uintN m, uintN r) {
+        index i{l, m, r};
+        auto findex = known_tables.find(i);
+        if (findex != known_tables.cend()) {
+            return {l, findex->second, r};
+        } else {
+            return {l, limit, r};
+        }
+    }
+    bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+        return s > m - know.m_l_bits && s <= m;
+    }
+    void update_index(index& i, uintN d, uintN m) {
+        uintN um = i.m;
+        i.m = m;
+        if (within_index(d, i.l, um, i.r)) {
+            i.l = m;
+        }
+        if (within_index(d, i.l, i.m, um)) {
+            i.r = m;
+        }
+    }
+    index merge_index(index& i, index& j) {
+        index o = {i.l, i.m, i.r};
+        if (j.m > o.m) {
+            ```c++
+#include <fstream>
+
+int main() {
+  std::fstream fin("numerus.in");
+  std::fstream fout("numerus.out");
+
+  uint64_t k, n;
+  fin >> k >> n;
+  fin.close();
+
+  uint64_t lin = ((k % 2) ? k * 2 : (k * 2) - 1);
+  uint64_t lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  uint64_t idx = (k % 2);
+  uint64_t lp = lok, rp = n;
+  uint64_t col1, col2;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col1 = (char)((idx / 2) + 'A');
+  } else {
+    while(lok != rp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx--;
+      } else {
+        rp = rp - (lok + idx);
+        idx--;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col1 = (char)((idx / 2) + 'E');
+  }
+  lin--;
+  lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  idx = (k % 2);
+  lp = lok, rp = n;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col2 = (char)((idx / 2) + 'A');
+  } else {
+    while(lok != rp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx--;
+      } else {
+        rp = rp - (lok + idx);
+        idx--;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col2 = (char)((idx / 2) + 'E');
+  }
+
+  fout << n + lok - 1;
+  while(lok != rp) {
+    rp - lok <= 1 ? fout << " " << lok : fout << " " << n + rp - 1;
+    rp - lok <= 1 ? lok += rp - lok + 1: lok = lok + rp - lok;
+  }
+  fout << "\n" << lin << "\n";
+  (col1 == col2) ? fout << col1 : fout << col1 << " " << col2;
+  fout.close();
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:10:36: error: 'uintN' has not been declared
+   10 |     template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+      |                                    ^~~~~
+main.cpp: In member function 'void Numerus::to_file::write(int*) const':
+main.cpp:10:90: error: 'uintN' was not declared in this scope; did you mean 'uint'?
+   10 |     template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+      |                                                                                          ^~~~~
+      |                                                                                          uint
+main.cpp: At global scope:
+main.cpp:13:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   13 | constexpr uintN lg2_limit = 10;
+      |           ^~~~~
+      |           uint
+main.cpp:14:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   14 | constexpr uintN limit = 1'000'000'000;
+      |           ^~~~~
+      |           uint
+main.cpp:15:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   15 | constexpr uintN limit_increment = limit / 2;
+      |           ^~~~~
+      |           uint
+main.cpp:16:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   16 | constexpr uintN m_max = 6;
+      |           ^~~~~
+      |           uint
+main.cpp:17:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   17 | constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+      |           ^~~~~
+      |           uint
+main.cpp:20:11: error: 'uintN' has not been declared
+   20 | template <uintN n_bits, uintN max_bits> struct knowledge {
+      |           ^~~~~
+main.cpp:20:25: error: 'uintN' has not been declared
+   20 | template <uintN n_bits, uintN max_bits> struct knowledge {
+      |                         ^~~~~
+main.cpp:21:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   21 |     uintN m_n_bits = n_bits;
+      |     ^~~~~
+      |     uint
+main.cpp:22:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   22 |     uintN m_l_bits = m_max - n_bits;
+      |     ^~~~~
+      |     uint
+main.cpp:23:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   23 |     uintN m_max_masks = uintN(1) << uintN(m_max_bits);
+      |     ^~~~~
+      |     uint
+main.cpp:24:22: error: 'uintN' does not name a type; did you mean 'uint'?
+   24 |     using uintPage = uintN;
+      |                      ^~~~~
+      |                      uint
+main.cpp:25:22: error: 'uintN' does not name a type; did you mean 'uint'?
+   25 |     using uintLine = uintN;
+      |                      ^~~~~
+      |                      uint
+main.cpp:26:22: error: 'uintN' does not name a type; did you mean 'uint'?
+   26 |     using uintMask = uintN;
+      |                      ^~~~~
+      |                      uint
+main.cpp:27:19: error: 'uint64_t' does not name a type
+   27 |     using uintN = uint64_t;
+      |                   ^~~~~~~~
+main.cpp:3:1: note: 'uint64_t' is defined in header '<cstdint>'; did you forget to '#include <cstdint>'?
+    2 | #include <cstdlib>
+  +++ |+#include <cstdint>
+    3 | 
+main.cpp:35:21: error: 'uintLine' has not been declared
+   35 |     void fill_masks(uintLine line) const {
+      |                     ^~~~~~~~
+main.cpp:45:29: error: 'uintPage' has not been declared
+   45 |     void set_page_from_mask(uintPage page, uintMask mask) {
+      |                             ^~~~~~~~
+main.cpp:45:44: error: 'uintMask' has not been declared
+   45 |     void set_page_from_mask(uintPage page, uintMask mask) {
+      |                                            ^~~~~~~~
+main.cpp:58:19: error: 'uintPage' has not been declared
+   58 |     void set_page(uintPage page) {
+      |                   ^~~~~~~~
+main.cpp:75:23: error: 'uintPage' has not been declared
+   75 |     bool contain_page(uintPage page, uintPage base = 0) const {
+      |                       ^~~~~~~~
+main.cpp:75:38: error: 'uintPage' has not been declared
+   75 |     bool contain_page(uintPage page, uintPage base = 0) const {
+      |                                      ^~~~~~~~
+main.cpp:91:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   91 |     uintN mpages = 0;
+      |     ^~~~~
+      |     uint
+main.cpp:92:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   92 |     uintN all_pages = 0;
+      |     ^~~~~
+      |     uint
+main.cpp:93:10: error: 'array' in namespace 'std' does not name a template type
+   93 |     std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+      |          ^~~~~
+main.cpp:3:1: note: 'std::array' is defined in header '<array>'; did you forget to '#include <array>'?
+    2 | #include <cstdlib>
+  +++ |+#include <array>
+    3 | 
+main.cpp:94:10: error: 'unordered_map' in namespace 'std' does not name a template type
+   94 |     std::unordered_map<uintMask, uintMask> fill_masks;
+      |          ^~~~~~~~~~~~~
+main.cpp:3:1: note: 'std::unordered_map' is defined in header '<unordered_map>'; did you forget to '#include <unordered_map>'?
+    2 | #include <cstdlib>
+  +++ |+#include <unordered_map>
+    3 | 
+main.cpp:95:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   95 |     uintN all_masks = 0;
+      |     ^~~~~
+      |     uint
+main.cpp:99:13: error: 'uintN' does not name a type; did you mean 'uint'?
+   99 |     virtual uintN next(uintN i) = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:100:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  100 |     virtual uintN at(uintN i) = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:101:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  101 |     virtual uintN previous(uintN i) = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:102:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  102 |     virtual uintN max() const = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:107:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  107 |     uintN next(uintN i) override { return i + bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:108:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  108 |     uintN at(uintN i) override { return i; }
+      |     ^~~~~
+      |     uint
+main.cpp:109:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  109 |     uintN previous(uintN i) override { return i - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:110:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  110 |     uintN max() const override { return limit - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:114:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  114 |     uintN next(uintN i) override { return i - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:115:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  115 |     uintN at(uintN i) override { return i; }
+      |     ^~~~~
+      |     uint
+main.cpp:116:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  116 |     uintN previous(uintN i) override { return i + bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:117:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  117 |     uintN max() const override { return limit_increment - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:120:11: error: 'uintN' has not been declared
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |           ^~~~~
+main.cpp:120:45: error: 'n_bits' was not declared in this scope
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |                                             ^~~~~~
+main.cpp:120:53: error: 'm_max' was not declared in this scope
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |                                                     ^~~~~
+main.cpp:120:58: error: template argument 1 is invalid
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |                                                          ^
+main.cpp:120:58: error: template argument 2 is invalid
+main.cpp:121:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  121 | template <> uintN k<0>::max() const { return 0; }
+      |             ^~~~~
+      |             uint
+main.cpp:124:47: error: 'k' has not been declared
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                               ^
+main.cpp:124:48: error: expected ',' or '...' before '<' token
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                                ^
+main.cpp:125:47: error: 'k' has not been declared
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                               ^
+main.cpp:125:48: error: expected ',' or '...' before '<' token
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                ^
+main.cpp:125:36: error: 'template<unsigned int page_bits> void Numerus::inject_truth::operator()(int)' cannot be overloaded with 'template<unsigned int page_bits> void Numerus::inject_truth::operator()(int)'
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                    ^~~~~~~~
+main.cpp:124:36: note: previous declaration 'template<unsigned int page_bits> void Numerus::inject_truth::operator()(int)'
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                    ^~~~~~~~
+main.cpp: In member function 'void Numerus::inject_truth::operator()(int)':
+main.cpp:124:66: error: 'k' was not declared in this scope
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                                                  ^
+main.cpp: In member function 'void Numerus::inject_truth::operator()(int)':
+main.cpp:125:83: error: 'k' was not declared in this scope
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                                   ^
+main.cpp:125:98: error: 't' was not declared in this scope
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                                                  ^
+main.cpp: At global scope:
+main.cpp:128:11: error: 'uintN' has not been declared
+  128 | template <uintN page_bits> struct learn {
+      |           ^~~~~
+main.cpp:129:22: error: 'uintN' does not name a type; did you mean 'uint'?
+  129 |     static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+      |                      ^~~~~
+      |                      uint
+main.cpp:130:22: error: 'uintN' does not name a type; did you mean 'uint'?
+  130 |     static constexpr uintN max_pages = 2 * (limit + 1);
+      |                      ^~~~~
+      |                      uint
+main.cpp:132:9: error: 'uintN' does not name a type; did you mean 'uint'?
+  132 |         uintN l, m, r;
+      |         ^~~~~
+      |         uint
+main.cpp:138:21: error: 'ostream' in namespace 'std' does not name a type
+  138 |         friend std::ostream& operator<<(std::ostream& os, const index& i) {
+      |                     ^~~~~~~
+main.cpp:3:1: note: 'std::ostream' is defined in header '<ostream>'; did you forget to '#include <ostream>'?
+    2 | #include <cstdlib>
+  +++ |+#include <ostream>
+    3 | 
+main.cpp:142:10: error: 'array' in namespace 'std' does not name a template type
+  142 |     std::array<k<page_bits>, 2 * limit + 2> jumps;
+      |          ^~~~~
+main.cpp:142:5: note: 'std::array' is defined in header '<array>'; did you forget to '#include <array>'?
+  142 |     std::array<k<page_bits>, 2 * limit + 2> jumps;
+      |     ^~~
+main.cpp:143:10: error: 'unordered_map' in namespace 'std' does not name a template type
+  143 |     std::unordered_map<index, uintN, std::less<>> known_tables;
+      |          ^~~~~~~~~~~~~
+main.cpp:143:5: note: 'std::unordered_map' is defined in header '<unordered_map>'; did you forget to '#include <unordered_map>'?
+  143 |     std::unordered_map<index, uintN, std::less<>> known_tables;
+      |     ^~~
+main.cpp:145:5: error: 'k' does not name a type
+  145 |     k<page_bits>& know;
+      |     ^
+main.cpp:146:21: error: 'uintN' has not been declared
+  146 |     index sub_index(uintN l, uintN m, uintN r) {
+      |                     ^~~~~
+main.cpp:146:30: error: 'uintN' has not been declared
+  146 |     index sub_index(uintN l, uintN m, uintN r) {
+      |                              ^~~~~
+main.cpp:146:39: error: 'uintN' has not been declared
+  146 |     index sub_index(uintN l, uintN m, uintN r) {
+      |                                       ^~~~~
+main.cpp:155:23: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                       ^~~~~
+main.cpp:155:32: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                                ^~~~~
+main.cpp:155:41: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                                         ^~~~~
+main.cpp:155:50: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                                                  ^~~~~
+main.cpp:158:33: error: 'uintN' has not been declared
+  158 |     void update_index(index& i, uintN d, uintN m) {
+      |                                 ^~~~~
+main.cpp:158:42: error: 'uintN' has not been declared
+  158 |     void update_index(index& i, uintN d, uintN m) {
+      |                                          ^~~~~
+main.cpp:170:25: error: expected '}' at end of input
+  170 |         if (j.m > o.m) {
+      |                         ^
+main.cpp:128:41: note: to match this '{'
+  128 | template <uintN page_bits> struct learn {
+      |                                         ^
+main.cpp:170:25: error: expected ';' at end of input
+  170 |         if (j.m > o.m) {
+      |                         ^
+      |                         ;
+main.cpp:170:25: error: expected '}' at end of input
+main.cpp:4:19: note: to match this '{'
+    4 | namespace Numerus {
+      |                   ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <cstdint>
+#include <cstdlib>
+#include <fstream>
+#include <ostream>
+#include <array>
+#include <unordered_map>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uint64_t words[N]) const { ::fwrite(words, 1, N * sizeof(uint64_t), fp); }
+};
+
+constexpr uint64_t lg2_limit = 10;
+constexpr uint64_t limit = 1'000'000'000;
+constexpr uint64_t limit_increment = limit / 2;
+constexpr uint64_t m_max = 6;
+constexpr uint64_t bit_set = uint64_t(1) << uint64_t(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uint64_t n_bits, uint64_t max_bits> struct knowledge {
+    uint64_t m_n_bits = n_bits;
+    uint64_t m_l_bits = m_max - n_bits;
+    uint64_t m_max_masks = uint64_t(1) << uint64_t(max_bits);
+    using uintPage = uint64_t;
+    using uintLine = uint64_t;
+    using uintMask = uint64_t;
+    using uint64_t = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uint64_t{0});
+    }
+
+    void find_masks(uint64_t line) const {
+        uint64_t k = bit_set >> (m_l_bits), l = line & ((uint64_t(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uint64_t(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uint64_t page, uint64_t mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uint64_t(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uint64_t(1) << tpage;
+            pages[tpage] |= uint64_t(1) << page;
+        }
+    }
+
+    void set_page(uint64_t page) {
+        pages[page] |= uint64_t(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uint64_t left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+            if (right == 0) right = (uint64_t(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uint64_t(1) << left;
+        if (right > 0) pages[right] |= uint64_t(1) << right;
+    }
+
+    bool contain_page(uint64_t page, uint64_t base = 0) const {
+        uint64_t mask = uint64_t(1) << (base + limit_increment) | uint64_t(1) << (page + limit_increment);
+        uint64_t all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uint64_t mpages = 0;
+    uint64_t all_pages = 0;
+    std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uint64_t, uint64_t> fill_masks;
+    uint64_t all_masks = 0;
+};
+
+struct action {
+    virtual uint64_t next(uint64_t i) = 0;
+    virtual uint64_t at(uint64_t i) = 0;
+    virtual uint64_t previous(uint64_t i) = 0;
+    virtual uint64_t max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uint64_t next(uint64_t i) override { return i + bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i - bit_set; }
+    uint64_t max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uint64_t next(uint64_t i) override { return i - bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i + bit_set; }
+    uint64_t max() const override { return limit_increment - bit_set; }
+};
+
+template <uint64_t n_bits> using k = knowledge<n_bits, m_max>;
+template <> uint64_t k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint64_t page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uint64_t page_bits> struct learn {
+    static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uint64_t max_pages = 2 * (limit + 1);
+    struct index {
+        uint64_t l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uint64_t, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uint64_t l, uint64_t m, uint64_t r) {
+        index i
+---------- assistant ----------
+
+```c++
+#include <cstdint>
+#include <cstdlib>
+#include <fstream>
+#include <ostream>
+#include <array>
+#include <unordered_map>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uint64_t words[N]) const { ::fwrite(words, 1, N * sizeof(uint64_t), fp); }
+};
+
+constexpr uint64_t lg2_limit = 10;
+constexpr uint64_t limit = 1'000'000'000;
+constexpr uint64_t limit_increment = limit / 2;
+constexpr uint64_t m_max = 6;
+constexpr uint64_t bit_set = uint64_t(1) << uint64_t(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uint64_t n_bits, uint64_t max_bits> struct knowledge {
+    uint64_t m_n_bits = n_bits;
+    uint64_t m_l_bits = m_max - n_bits;
+    uint64_t m_max_masks = uint64_t(1) << uint64_t(max_bits);
+    using uintPage = uint64_t;
+    using uintLine = uint64_t;
+    using uintMask = uint64_t;
+    using uint64_t = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uint64_t{0});
+    }
+
+    void find_masks(uint64_t line) const {
+        uint64_t k = bit_set >> (m_l_bits), l = line & ((uint64_t(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uint64_t(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uint64_t page, uint64_t mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uint64_t(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uint64_t(1) << tpage;
+            pages[tpage] |= uint64_t(1) << page;
+        }
+    }
+
+    void set_page(uint64_t page) {
+        pages[page] |= uint64_t(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uint64_t left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+            if (right == 0) right = (uint64_t(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uint64_t(1) << left;
+        if (right > 0) pages[right] |= uint64_t(1) << right;
+    }
+
+    bool contain_page(uint64_t page, uint64_t base = 0) const {
+        uint64_t mask = uint64_t(1) << (base + limit_increment) | uint64_t(1) << (page + limit_increment);
+        uint64_t all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uint64_t mpages = 0;
+    uint64_t all_pages = 0;
+    std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uint64_t, uint64_t> fill_masks;
+    uint64_t all_masks = 0;
+};
+
+struct action {
+    virtual uint64_t next(uint64_t i) = 0;
+    virtual uint64_t at(uint64_t i) = 0;
+    virtual uint64_t previous(uint64_t i) = 0;
+    virtual uint64_t max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uint64_t next(uint64_t i) override { return i + bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i - bit_set; }
+    uint64_t max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uint64_t next(uint64_t i) override { return i - bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i + bit_set; }
+    uint64_t max() const override { return limit_increment - bit_set; }
+};
+
+template <uint64_t n_bits> using k = knowledge<n_bits, m_max>;
+template <> uint64_t k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint64_t page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uint64_t page_bits> struct learn {
+    static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uint64_t max_pages = 2 * (limit + 1);
+    struct index {
+        uint64_t l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uint64_t, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uint64_t l, uint64_t m, uint64_t r) {
+        index iThe complete fixed code below:
+
+```c++
+#include <fstream>
+#include <iostream>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+};
+
+constexpr uintN lg2_limit = 10;
+constexpr uintN limit = 1'000'000'000;
+constexpr uintN limit_increment = limit / 2;
+constexpr uintN m_max = 6;
+constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uintN n_bits, uintN max_bits> struct knowledge {
+    uintN m_n_bits = n_bits;
+    uintN m_l_bits = m_max - n_bits;
+    uintN m_max_masks = uintN(1) << uintN(max_bits);
+    using uintPage = uintN;
+    using uintLine = uintN;
+    using uintMask = uintN;
+    using uintN = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uintLine{0});
+    }
+
+    void find_masks(uintLine line) const {
+        uintN k = bit_set >> (m_l_bits), l = line & ((uintN(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uintN(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uintPage page, uintMask mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uintN(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uintN(1) << tpage;
+            pages[tpage] |= uintN(1) << page;
+        }
+    }
+
+    void set_page(uintPage page) {
+        pages[page] |= uintN(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uintPage left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+            if (right == 0) right = (uintN(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uintN(1) << left;
+        if (right > 0) pages[right] |= uintN(1) << right;
+    }
+
+    bool contain_page(uintPage page, uintPage base = 0) const {
+        uintMask mask = uintN(1) << (base + limit_increment) | uintN(1) << (page + limit_increment);
+        uintN all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uintN mpages = 0;
+    uintN all_pages = 0;
+    std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uintMask, uintMask> fill_masks;
+    uintN all_masks = 0;
+};
+
+struct action {
+    virtual uintN next(uintN i) = 0;
+    virtual uintN at(uintN i) = 0;
+    virtual uintN previous(uintN i) = 0;
+    virtual uintN max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uintN next(uintN i) override { return i + bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i - bit_set; }
+    uintN max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uintN next(uintN i) override { return i - bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i + bit_set; }
+    uintN max() const override { return limit_increment - bit_set; }
+};
+
+template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+template <> uintN k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uintN page_bits> struct learn {
+    static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uintN max_pages = 2 * (limit + 1);
+    struct index {
+        uintN l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uintN, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uintN l, uintN m, uintN r) {
+        index i{l, m, r};
+        auto findex = known_tables.find(i);
+        if (findex != known_tables.cend()) {
+            return {l, findex->second, r};
+        } else {
+            return {l, limit, r};
+        }
+    }
+    bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+        return s > m - know.m_l_bits && s <= m;
+    }
+    void update_index(index& i, uintN d, uintN m) {
+        uintN um = i.m;
+        i.m = m;
+        if (within_index(d, i.l, um, i.r)) {
+            i.l = m;
+        }
+        if (within_index(d, i.l, i.m, um)) {
+            i.r = m;
+        }
+    }
+    index merge_index(index& i, index& j) {
+        index o = {i.l, i.m, i.r};
+        if (j.m > o.m) {
+            uint
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:31:11: error: declaration of 'using uint64_t = uint64_t' changes meaning of 'uint64_t' [-fpermissive]
+   31 |     using uint64_t = uint64_t;
+      |           ^~~~~~~~
+In file included from /usr/include/stdint.h:37,
+                 from /usr/local/lib/gcc/x86_64-linux-gnu/11.4.0/include/stdint.h:9,
+                 from /usr/local/include/c++/11.4.0/cstdint:41,
+                 from main.cpp:1:
+/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h:27:20: note: 'uint64_t' declared here as 'typedef __uint64_t uint64_t'
+   27 | typedef __uint64_t uint64_t;
+      |                    ^~~~~~~~
+main.cpp:97:58: error: invalid use of non-static data member 'Numerus::knowledge<n_bits, max_bits>::m_l_bits'
+   97 |     std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+      |                                                          ^~~~~~~~
+main.cpp:26:14: note: declared here
+   26 |     uint64_t m_l_bits = m_max - n_bits;
+      |              ^~~~~~~~
+main.cpp:97:72: error: template argument 2 is invalid
+   97 |     std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+      |                                                                        ^
+main.cpp: In constructor 'Numerus::knowledge<n_bits, max_bits>::knowledge()':
+main.cpp:34:15: error: request for member 'fill' in '((Numerus::knowledge<n_bits, max_bits>*)this)->Numerus::knowledge<n_bits, max_bits>::pages', which is of non-class type 'int'
+   34 |         pages.fill(0);
+      |               ^~~~
+main.cpp:35:20: error: 'class std::unordered_map<long unsigned int, long unsigned int>' has no member named 'fill'
+   35 |         fill_masks.fill(0);
+      |                    ^~~~
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::find_masks(Numerus::knowledge<n_bits, max_bits>::uint64_t) const':
+main.cpp:43:23: error: no match for 'operator[]' (operand types are 'const std::unordered_map<long unsigned int, long unsigned int>' and 'Numerus::knowledge<n_bits, max_bits>::uint64_t' {aka 'long unsigned int'})
+   43 |             fill_masks[mask] = mask;
+      |                       ^
+In file included from /usr/local/include/c++/11.4.0/unordered_map:47,
+                 from main.cpp:6:
+/usr/local/include/c++/11.4.0/bits/unordered_map.h:979:7: note: candidate: 'std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::mapped_type& std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::operator[](const key_type&) [with _Key = long unsigned int; _Tp = long unsigned int; _Hash = std::hash<long unsigned int>; _Pred = std::equal_to<long unsigned int>; _Alloc = std::allocator<std::pair<const long unsigned int, long unsigned int> >; std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::mapped_type = long unsigned int; std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::key_type = long unsigned int]' (near match)
+  979 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/unordered_map.h:979:7: note:   passing 'const std::unordered_map<long unsigned int, long unsigned int>*' as 'this' argument discards qualifiers
+/usr/local/include/c++/11.4.0/bits/unordered_map.h:983:7: note: candidate: 'std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::mapped_type& std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::operator[](std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::key_type&&) [with _Key = long unsigned int; _Tp = long unsigned int; _Hash = std::hash<long unsigned int>; _Pred = std::equal_to<long unsigned int>; _Alloc = std::allocator<std::pair<const long unsigned int, long unsigned int> >; std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::mapped_type = long unsigned int; std::unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>::key_type = long unsigned int]' (near match)
+  983 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/unordered_map.h:983:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::set_page_from_mask(Numerus::knowledge<n_bits, max_bits>::uint64_t, Numerus::knowledge<n_bits, max_bits>::uint64_t)':
+main.cpp:54:35: error: call of overloaded 'div(Numerus::knowledge<n_bits, max_bits>::uint64_t&, const long unsigned int&)' is ambiguous
+   54 |             auto [q, r] = std::div(page, line);
+      |                           ~~~~~~~~^~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/cstdlib:75,
+                 from main.cpp:2:
+/usr/include/stdlib.h:852:14: note: candidate: 'div_t div(int, int)'
+  852 | extern div_t div (int __numer, int __denom)
+      |              ^~~
+In file included from main.cpp:2:
+/usr/local/include/c++/11.4.0/cstdlib:177:3: note: candidate: 'ldiv_t std::div(long int, long int)'
+  177 |   div(long __i, long __j) { return ldiv(__i, __j); }
+      |   ^~~
+/usr/local/include/c++/11.4.0/cstdlib:213:3: note: candidate: 'lldiv_t __gnu_cxx::div(long long int, long long int)'
+  213 |   div(long long __n, long long __d)
+      |   ^~~
+main.cpp:57:18: error: invalid types 'int[Numerus::knowledge<n_bits, max_bits>::uint64_t {aka long unsigned int}]' for array subscript
+   57 |             pages[page] |= uint64_t(1) << tpage;
+      |                  ^
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::set_page(Numerus::knowledge<n_bits, max_bits>::uint64_t)':
+main.cpp:63:14: error: invalid types 'int[Numerus::knowledge<n_bits, max_bits>::uint64_t {aka long unsigned int}]' for array subscript
+   63 |         pages[page] |= uint64_t(1) << page;
+      |              ^
+main.cpp:65:29: error: non-constant condition for static assertion
+   65 |         static_assert(limit > 0);
+      |                       ~~~~~~^~~
+main.cpp:65:29: error: the value of 'limit' is not usable in a constant expression
+main.cpp:64:27: note: 'limit' was not initialized with a constant expression
+   64 |         const static auto limit = m_max - m_l_bits;
+      |                           ^~~~~
+main.cpp:75:28: error: invalid types 'int[Numerus::knowledge<n_bits, max_bits>::uint64_t {aka long unsigned int}]' for array subscript
+   75 |         if (left > 0) pages[left] |= uint64_t(1) << left;
+      |                            ^
+main.cpp:76:29: error: invalid types 'int[Numerus::knowledge<n_bits, max_bits>::uint64_t {aka long unsigned int}]' for array subscript
+   76 |         if (right > 0) pages[right] |= uint64_t(1) << right;
+      |                             ^
+main.cpp: In member function 'bool Numerus::knowledge<n_bits, max_bits>::contain_page(Numerus::knowledge<n_bits, max_bits>::uint64_t, Numerus::knowledge<n_bits, max_bits>::uint64_t) const':
+main.cpp:82:23: error: request for member 'at' in '((const Numerus::knowledge<n_bits, max_bits>*)this)->Numerus::knowledge<n_bits, max_bits>::pages', which is of non-class type 'const int'
+   82 |         return (pages.at(mask) & all) > 0;
+      |                       ^~
+main.cpp: At global scope:
+main.cpp:125:34: error: no member function 'max' declared in 'Numerus::knowledge<0, 6>'
+  125 | template <> uint64_t k<0>::max() const { return 0; }
+      |                                  ^~~~~
+main.cpp:129:68: error: 'k' is not a type
+  129 |     template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                    ^
+main.cpp:129:69: error: expected ',' or '...' before '<' token
+  129 |     template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                     ^
+main.cpp: In member function 'void Numerus::inject_truth::operator()(Numerus::k<page_bits>&, int)':
+main.cpp:129:102: error: 't' was not declared in this scope
+  129 |     template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                                                      ^
+main.cpp: At global scope:
+main.cpp:133:71: error: 'know' was not declared in this scope
+  133 |     static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits;
+      |                                                                       ^~~~
+main.cpp:151:46: error: expected '}' at end of input
+  151 |         index iThe complete fixed code below:
+      |                                              ^
+main.cpp:132:44: note: to match this '{'
+  132 | template <uint64_t page_bits> struct learn {
+      |                                            ^
+main.cpp: In member function 'Numerus::learn<page_bits>::index Numerus::learn<page_bits>::sub_index(uint64_t, uint64_t, uint64_t)':
+main.cpp:151:20: error: expected initializer before 'complete'
+  151 |         index iThe complete fixed code below:
+      |                    ^~~~~~~~
+main.cpp:151:46: error: expected '}' at end of input
+  151 |         index iThe complete fixed code below:
+      |                                              ^
+main.cpp:150:57: note: to match this '{'
+  150 |     index sub_index(uint64_t l, uint64_t m, uint64_t r) {
+      |                                                         ^
+main.cpp: At global scope:
+main.cpp:151:46: error: expected ';' at end of input
+  151 |         index iThe complete fixed code below:
+      |                                              ^
+      |                                              ;
+main.cpp:151:46: error: expected '}' at end of input
+main.cpp:8:19: note: to match this '{'
+    8 | namespace Numerus {
+      |                   ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+Here is the complete fixed code:
+
+```c++
+#include <fstream>
+#include <iostream>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+};
+
+constexpr uintN lg2_limit = 10;
+constexpr uintN limit = 1'000'000'000;
+constexpr uintN limit_increment = limit / 2;
+constexpr uintN m_max = 6;
+constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uintN n_bits, uintN max_bits> struct knowledge {
+    uintN m_n_bits = n_bits;
+    uintN m_l_bits = m_max - n_bits;
+    uintN m_max_masks = uintN(1) << uintN(max_bits);
+    using uintPage = uintN;
+    using uintLine = uintN;
+    using uintMask = uintN;
+    using uintN = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uintLine{0});
+    }
+
+    void find_masks(uintLine line) const {
+        uintN k = bit_set >> (m_l_bits), l = line & ((uintN(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uintN(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uintPage page, uintMask mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uintN(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uintN(1) << tpage;
+            pages[tpage] |= uintN(1) << page;
+        }
+    }
+
+    void set_page(uintPage page) {
+        pages[page] |= uintN(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uintPage left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+            if (right == 0) right = (uintN(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uintN(1) << left;
+        if (right > 0) pages[right] |= uintN(1) << right;
+    }
+
+    bool contain_page(uintPage page, uintPage base = 0) const {
+        uintMask mask = uintN(1) << (base + limit_increment) | uintN(1) << (page + limit_increment);
+        uintN all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uintN mpages = 0;
+    uintN all_pages = 0;
+    std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uintMask, uintMask> fill_masks;
+    uintN all_masks = 0;
+};
+
+struct action {
+    virtual uintN next(uintN i) = 0;
+    virtual uintN at(uintN i) = 0;
+    virtual uintN previous(uintN i) = 0;
+    virtual uintN max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uintN next(uintN i) override { return i + bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i - bit_set; }
+    uintN max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uintN next(uintN i) override { return i - bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i + bit_set; }
+    uintN max() const override { return limit_increment - bit_set; }
+};
+
+template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+template <> uintN k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uintN page_bits> struct learn {
+    static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uintN max_pages = 2 * (limit + 1);
+    struct index {
+        uintN l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uintN, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uintN l, uintN m, uintN r) {
+        index i = {l, m, r};
+        auto findex = known_tables.find(i);
+        if (findex != known_tables.cend()) {
+            return {l, findex->second, r};
+        } else {
+            return {l, limit, r};
+        }
+    }
+    bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+        return s > m - know.m_l_bits && s <= m;
+    }
+    void update_index(index& i, uintN d, uintN m) {
+        uintN um = i.m;
+        i.m = m;
+        if (within_index(d, i.l, um, i.r)) {
+            i.l = m;
+        }
+        if (within_index(d, i.l, i.m, um)) {
+            i.r = m;
+        }
+    }
+    bool find_in_jump(index& i, uintN d, uintN m) {
+        const static auto limit = k<page_bits>::limit;
+        const static auto page_limit = lbits
+---------- assistant ----------
+
+Here is the complete fixed code:
+
+```c++
+#include <fstream>
+#include <iostream>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+};
+
+constexpr uintN lg2_limit = 10;
+constexpr uintN limit = 1'000'000'000;
+constexpr uintN limit_increment = limit / 2;
+constexpr uintN m_max = 6;
+constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uintN n_bits, uintN max_bits> struct knowledge {
+    uintN m_n_bits = n_bits;
+    uintN m_l_bits = m_max - n_bits;
+    uintN m_max_masks = uintN(1) << uintN(max_bits);
+    using uintPage = uintN;
+    using uintLine = uintN;
+    using uintMask = uintN;
+    using uintN = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uintLine{0});
+    }
+
+    void find_masks(uintLine line) const {
+        uintN k = bit_set >> (m_l_bits), l = line & ((uintN(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uintN(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uintPage page, uintMask mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uintN(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uintN(1) << tpage;
+            pages[tpage] |= uintN(1) << page;
+        }
+    }
+
+    void set_page(uintPage page) {
+        pages[page] |= uintN(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uintPage left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uintN(1) << m_n_bits) - 1);
+            if (right == 0) right = (uintN(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uintN(1) << left;
+        if (right > 0) pages[right] |= uintN(1) << right;
+    }
+
+    bool contain_page(uintPage page, uintPage base = 0) const {
+        uintMask mask = uintN(1) << (base + limit_increment) | uintN(1) << (page + limit_increment);
+        uintN all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uintN mpages = 0;
+    uintN all_pages = 0;
+    std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uintMask, uintMask> fill_masks;
+    uintN all_masks = 0;
+};
+
+struct action {
+    virtual uintN next(uintN i) = 0;
+    virtual uintN at(uintN i) = 0;
+    virtual uintN previous(uintN i) = 0;
+    virtual uintN max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uintN next(uintN i) override { return i + bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i - bit_set; }
+    uintN max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uintN next(uintN i) override { return i - bit_set; }
+    uintN at(uintN i) override { return i; }
+    uintN previous(uintN i) override { return i + bit_set; }
+    uintN max() const override { return limit_increment - bit_set; }
+};
+
+template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+template <> uintN k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uintN page_bits> struct learn {
+    static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uintN max_pages = 2 * (limit + 1);
+    struct index {
+        uintN l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uintN, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uintN l, uintN m, uintN r) {
+        index i = {l, m, r};
+        auto findex = known_tables.find(i);
+        if (findex != known_tables.cend()) {
+            return {l, findex->second, r};
+        } else {
+            return {l, limit, r};
+        }
+    }
+    bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+        return s > m - know.m_l_bits && s <= m;
+    }
+    void update_index(index& i, uintN d, uintN m) {
+        uintN um = i.m;
+        i.m = m;
+        if (within_index(d, i.l, um, i.r)) {
+            i.l = m;
+        }
+        if (within_index(d, i.l, i.m, um)) {
+            i.r = m;
+        }
+    }
+    bool find_in_jump(index& i, uintN d, uintN m) {
+        const static auto limit = k<page_bits>::limit;
+        const static auto page_limit = lbits```c++
+#include <fstream>
+
+int main() {
+  std::fstream fin("numerus.in");
+  std::fstream fout("numerus.out");
+
+  uint64_t k, n;
+  fin >> k >> n;
+  fin.close();
+
+  uint64_t lin = ((k % 2) ? k * 2 : (k * 2) - 1);
+  uint64_t lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  uint64_t idx = (k % 2);
+  uint64_t lp = lok, rp = n;
+  uint64_t col1, col2;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col1 = (char)((idx / 2) + 'A');
+  } else {
+    while(lok != rp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx--;
+      } else {
+        rp = rp - (lok + idx);
+        idx--;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col1 = (char)((idx / 2) + 'E');
+  }
+  lin--;
+  lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  idx = (k % 2);
+  lp = lok, rp = n;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col2 = (char)((idx / 2) + 'A');
+  } else {
+    while(lok != rp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx--;
+      } else {
+        rp = rp - (lok + idx);
+        idx--;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col2 = (char)((idx / 2) + 'E');
+  }
+
+  fout << n + lok - 1;
+  while(lok != rp) {
+    rp - lok <= 1 ? fout << " " << lok : fout << " " << n + rp - 1;
+    rp - lok <= 1 ? lok += rp - lok + 1: lok = lok + rp - lok;
+  }
+  fout << "\n" << lin << "\n";
+  (col1 == col2) ? fout << col1 : fout << col1 << " " << col2;
+  fout.close();
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:10:36: error: 'uintN' has not been declared
+   10 |     template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+      |                                    ^~~~~
+main.cpp: In member function 'void Numerus::to_file::write(int*) const':
+main.cpp:10:90: error: 'uintN' was not declared in this scope; did you mean 'uint'?
+   10 |     template <size_t N> void write(uintN words[N]) const { ::fwrite(words, 1, N * sizeof(uintN), fp); }
+      |                                                                                          ^~~~~
+      |                                                                                          uint
+main.cpp: At global scope:
+main.cpp:13:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   13 | constexpr uintN lg2_limit = 10;
+      |           ^~~~~
+      |           uint
+main.cpp:14:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   14 | constexpr uintN limit = 1'000'000'000;
+      |           ^~~~~
+      |           uint
+main.cpp:15:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   15 | constexpr uintN limit_increment = limit / 2;
+      |           ^~~~~
+      |           uint
+main.cpp:16:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   16 | constexpr uintN m_max = 6;
+      |           ^~~~~
+      |           uint
+main.cpp:17:11: error: 'uintN' does not name a type; did you mean 'uint'?
+   17 | constexpr uintN bit_set = uintN(1) << uintN(m_max) - 1;
+      |           ^~~~~
+      |           uint
+main.cpp:20:11: error: 'uintN' has not been declared
+   20 | template <uintN n_bits, uintN max_bits> struct knowledge {
+      |           ^~~~~
+main.cpp:20:25: error: 'uintN' has not been declared
+   20 | template <uintN n_bits, uintN max_bits> struct knowledge {
+      |                         ^~~~~
+main.cpp:21:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   21 |     uintN m_n_bits = n_bits;
+      |     ^~~~~
+      |     uint
+main.cpp:22:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   22 |     uintN m_l_bits = m_max - n_bits;
+      |     ^~~~~
+      |     uint
+main.cpp:23:5: error: 'uintN' does not name a type; did you mean 'uint'?
+   23 |     uintN m_max_masks = uintN(1) << uintN(max_bits);
+      |     ^~~~~
+      |     uint
+main.cpp:24:22: error: 'uintN' does not name a type; did you mean 'uint'?
+   24 |     using uintPage = uintN;
+      |                      ^~~~~
+      |                      uint
+main.cpp:25:22: error: 'uintN' does not name a type; did you mean 'uint'?
+   25 |     using uintLine = uintN;
+      |                      ^~~~~
+      |                      uint
+main.cpp:26:22: error: 'uintN' does not name a type; did you mean 'uint'?
+   26 |     using uintMask = uintN;
+      |                      ^~~~~
+      |                      uint
+main.cpp:35:21: error: 'uintLine' has not been declared
+   35 |     void find_masks(uintLine line) const {
+      |                     ^~~~~~~~
+main.cpp:45:29: error: 'uintPage' has not been declared
+   45 |     void set_page_from_mask(uintPage page, uintMask mask) {
+      |                             ^~~~~~~~
+main.cpp:45:44: error: 'uintMask' has not been declared
+   45 |     void set_page_from_mask(uintPage page, uintMask mask) {
+      |                                            ^~~~~~~~
+main.cpp:58:19: error: 'uintPage' has not been declared
+   58 |     void set_page(uintPage page) {
+      |                   ^~~~~~~~
+main.cpp:75:23: error: 'uintPage' has not been declared
+   75 |     bool contain_page(uintPage page, uintPage base = 0) const {
+      |                       ^~~~~~~~
+main.cpp:75:38: error: 'uintPage' has not been declared
+   75 |     bool contain_page(uintPage page, uintPage base = 0) const {
+      |                                      ^~~~~~~~
+main.cpp:93:10: error: 'array' in namespace 'std' does not name a template type
+   93 |     std::array<uintN, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+      |          ^~~~~
+main.cpp:3:1: note: 'std::array' is defined in header '<array>'; did you forget to '#include <array>'?
+    2 | #include <iostream>
+  +++ |+#include <array>
+    3 | 
+main.cpp:94:10: error: 'unordered_map' in namespace 'std' does not name a template type
+   94 |     std::unordered_map<uintMask, uintMask> fill_masks;
+      |          ^~~~~~~~~~~~~
+main.cpp:3:1: note: 'std::unordered_map' is defined in header '<unordered_map>'; did you forget to '#include <unordered_map>'?
+    2 | #include <iostream>
+  +++ |+#include <unordered_map>
+    3 | 
+main.cpp:99:13: error: 'uintN' does not name a type; did you mean 'uint'?
+   99 |     virtual uintN next(uintN i) = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:100:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  100 |     virtual uintN at(uintN i) = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:101:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  101 |     virtual uintN previous(uintN i) = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:102:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  102 |     virtual uintN max() const = 0;
+      |             ^~~~~
+      |             uint
+main.cpp:107:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  107 |     uintN next(uintN i) override { return i + bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:108:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  108 |     uintN at(uintN i) override { return i; }
+      |     ^~~~~
+      |     uint
+main.cpp:109:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  109 |     uintN previous(uintN i) override { return i - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:110:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  110 |     uintN max() const override { return limit - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:114:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  114 |     uintN next(uintN i) override { return i - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:115:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  115 |     uintN at(uintN i) override { return i; }
+      |     ^~~~~
+      |     uint
+main.cpp:116:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  116 |     uintN previous(uintN i) override { return i + bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:117:5: error: 'uintN' does not name a type; did you mean 'uint'?
+  117 |     uintN max() const override { return limit_increment - bit_set; }
+      |     ^~~~~
+      |     uint
+main.cpp:120:11: error: 'uintN' has not been declared
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |           ^~~~~
+main.cpp:120:45: error: 'n_bits' was not declared in this scope
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |                                             ^~~~~~
+main.cpp:120:53: error: 'm_max' was not declared in this scope
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |                                                     ^~~~~
+main.cpp:120:58: error: template argument 1 is invalid
+  120 | template <uintN n_bits> using k = knowledge<n_bits, m_max>;
+      |                                                          ^
+main.cpp:120:58: error: template argument 2 is invalid
+main.cpp:121:13: error: 'uintN' does not name a type; did you mean 'uint'?
+  121 | template <> uintN k<0>::max() const { return 0; }
+      |             ^~~~~
+      |             uint
+main.cpp:124:47: error: 'k' has not been declared
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                               ^
+main.cpp:124:48: error: expected ',' or '...' before '<' token
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                                ^
+main.cpp:125:47: error: 'k' has not been declared
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                               ^
+main.cpp:125:48: error: expected ',' or '...' before '<' token
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                ^
+main.cpp:125:36: error: 'template<unsigned int page_bits> void Numerus::inject_truth::operator()(int)' cannot be overloaded with 'template<unsigned int page_bits> void Numerus::inject_truth::operator()(int)'
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                    ^~~~~~~~
+main.cpp:124:36: note: previous declaration 'template<unsigned int page_bits> void Numerus::inject_truth::operator()(int)'
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                    ^~~~~~~~
+main.cpp: In member function 'void Numerus::inject_truth::operator()(int)':
+main.cpp:124:66: error: 'k' was not declared in this scope
+  124 |     template <uint page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+      |                                                                  ^
+main.cpp: In member function 'void Numerus::inject_truth::operator()(int)':
+main.cpp:125:83: error: 'k' was not declared in this scope
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                                   ^
+main.cpp:125:98: error: 't' was not declared in this scope; did you mean 'tm'?
+  125 |     template <uint page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                                                  ^
+      |                                                                                                  tm
+main.cpp: At global scope:
+main.cpp:128:11: error: 'uintN' has not been declared
+  128 | template <uintN page_bits> struct learn {
+      |           ^~~~~
+main.cpp:129:22: error: 'uintN' does not name a type; did you mean 'uint'?
+  129 |     static constexpr uintN limit = k<page_bits>::limit_increment / know.m_l_bits;
+      |                      ^~~~~
+      |                      uint
+main.cpp:130:22: error: 'uintN' does not name a type; did you mean 'uint'?
+  130 |     static constexpr uintN max_pages = 2 * (limit + 1);
+      |                      ^~~~~
+      |                      uint
+main.cpp:132:9: error: 'uintN' does not name a type; did you mean 'uint'?
+  132 |         uintN l, m, r;
+      |         ^~~~~
+      |         uint
+main.cpp:142:10: error: 'array' in namespace 'std' does not name a template type
+  142 |     std::array<k<page_bits>, 2 * limit + 2> jumps;
+      |          ^~~~~
+main.cpp:142:5: note: 'std::array' is defined in header '<array>'; did you forget to '#include <array>'?
+  142 |     std::array<k<page_bits>, 2 * limit + 2> jumps;
+      |     ^~~
+main.cpp:143:10: error: 'unordered_map' in namespace 'std' does not name a template type
+  143 |     std::unordered_map<index, uintN, std::less<>> known_tables;
+      |          ^~~~~~~~~~~~~
+main.cpp:143:5: note: 'std::unordered_map' is defined in header '<unordered_map>'; did you forget to '#include <unordered_map>'?
+  143 |     std::unordered_map<index, uintN, std::less<>> known_tables;
+      |     ^~~
+main.cpp:145:5: error: 'k' does not name a type
+  145 |     k<page_bits>& know;
+      |     ^
+main.cpp:146:21: error: 'uintN' has not been declared
+  146 |     index sub_index(uintN l, uintN m, uintN r) {
+      |                     ^~~~~
+main.cpp:146:30: error: 'uintN' has not been declared
+  146 |     index sub_index(uintN l, uintN m, uintN r) {
+      |                              ^~~~~
+main.cpp:146:39: error: 'uintN' has not been declared
+  146 |     index sub_index(uintN l, uintN m, uintN r) {
+      |                                       ^~~~~
+main.cpp:155:23: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                       ^~~~~
+main.cpp:155:32: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                                ^~~~~
+main.cpp:155:41: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                                         ^~~~~
+main.cpp:155:50: error: 'uintN' has not been declared
+  155 |     bool within_index(uintN s, uintN l, uintN m, uintN r) const {
+      |                                                  ^~~~~
+main.cpp:158:33: error: 'uintN' has not been declared
+  158 |     void update_index(index& i, uintN d, uintN m) {
+      |                                 ^~~~~
+main.cpp:158:42: error: 'uintN' has not been declared
+  158 |     void update_index(index& i, uintN d, uintN m) {
+      |                                          ^~~~~
+main.cpp:168:33: error: 'uintN' has not been declared
+  168 |     bool find_in_jump(index& i, uintN d, uintN m) {
+      |                                 ^~~~~
+main.cpp:168:42: error: 'uintN' has not been declared
+  168 |     bool find_in_jump(index& i, uintN d, uintN m) {
+      |                                          ^~~~~
+main.cpp:170:45: error: expected '}' at end of input
+  170 |         const static auto page_limit = lbits
+      |                                             ^
+main.cpp:128:41: note: to match this '{'
+  128 | template <uintN page_bits> struct learn {
+      |                                         ^
+main.cpp:170:45: error: expected ';' at end of input
+  170 |         const static auto page_limit = lbits
+      |                                             ^
+      |                                             ;
+main.cpp:170:45: error: expected '}' at end of input
+main.cpp:4:19: note: to match this '{'
+    4 | namespace Numerus {
+      |                   ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+Here is the complete fixed code:
+
+```c++
+#include <fstream>
+#include <iostream>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uint64_t words[N]) const { ::fwrite(words, 1, N * sizeof(uint64_t), fp); }
+};
+
+constexpr uint64_t lg2_limit = 10;
+constexpr uint64_t limit = 1'000'000'000;
+constexpr uint64_t limit_increment = limit / 2;
+constexpr uint64_t m_max = 6;
+constexpr uint64_t bit_set = uint64_t(1) << uint64_t(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uint64_t n_bits, uint64_t max_bits> struct knowledge {
+    uint64_t m_n_bits = n_bits;
+    uint64_t m_l_bits = m_max - n_bits;
+    uint64_t m_max_masks = uint64_t(1) << uint64_t(max_bits);
+    using uintPage = uint64_t;
+    using uintLine = uint64_t;
+    using uintMask = uint64_t;
+    using uint64_t = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uint64_t{0});
+    }
+
+    void find_masks(uint64_t line) const {
+        uint64_t k = bit_set >> (m_l_bits), l = line & ((uint64_t(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uint64_t(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uint64_t page, uint64_t mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uint64_t(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uint64_t(1) << tpage;
+            pages[tpage] |= uint64_t(1) << page;
+        }
+    }
+
+    void set_page(uint64_t page) {
+        pages[page] |= uint64_t(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uint64_t left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+            if (right == 0) right = (uint64_t(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uint64_t(1) << left;
+        if (right > 0) pages[right] |= uint64_t(1) << right;
+    }
+
+    bool contain_page(uint64_t page, uint64_t base = 0) const {
+        uint64_t mask = uint64_t(1) << (base + limit_increment) | uint64_t(1) << (page + limit_increment);
+        uint64_t all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uint64_t mpages = 0;
+    uint64_t all_pages = 0;
+    std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uint64_t, uint64_t> fill_masks;
+    uint64_t all_masks = 0;
+};
+
+struct action {
+    virtual uint64_t next(uint64_t i) = 0;
+    virtual uint64_t at(uint64_t i) = 0;
+    virtual uint64_t previous(uint64_t i) = 0;
+    virtual uint64_t max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uint64_t next(uint64_t i) override { return i + bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i - bit_set; }
+    uint64_t max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uint64_t next(uint64_t i) override { return i - bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i + bit_set; }
+    uint64_t max() const override { return limit_increment - bit_set; }
+};
+
+template <uint64_t n_bits> using k = knowledge<n_bits, m_max>;
+template <> uint64_t k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint64_t page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uint64_t page_bits> struct learn {
+    static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uint64_t max_pages = 2 * (limit + 1);
+    struct index {
+        uint64_t l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uint64_t, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uint64_t l, uint64_t m, uint64_t r) {
+        index i = {l, m, r};
+        auto findex = known_tables.find
+---------- assistant ----------
+
+Here is the complete fixed code:
+
+```c++
+#include <fstream>
+#include <iostream>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uint64_t words[N]) const { ::fwrite(words, 1, N * sizeof(uint64_t), fp); }
+};
+
+constexpr uint64_t lg2_limit = 10;
+constexpr uint64_t limit = 1'000'000'000;
+constexpr uint64_t limit_increment = limit / 2;
+constexpr uint64_t m_max = 6;
+constexpr uint64_t bit_set = uint64_t(1) << uint64_t(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uint64_t n_bits, uint64_t max_bits> struct knowledge {
+    uint64_t m_n_bits = n_bits;
+    uint64_t m_l_bits = m_max - n_bits;
+    uint64_t m_max_masks = uint64_t(1) << uint64_t(max_bits);
+    using uintPage = uint64_t;
+    using uintLine = uint64_t;
+    using uintMask = uint64_t;
+    using uint64_t = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uint64_t{0});
+    }
+
+    void find_masks(uint64_t line) const {
+        uint64_t k = bit_set >> (m_l_bits), l = line & ((uint64_t(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uint64_t(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uint64_t page, uint64_t mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uint64_t(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uint64_t(1) << tpage;
+            pages[tpage] |= uint64_t(1) << page;
+        }
+    }
+
+    void set_page(uint64_t page) {
+        pages[page] |= uint64_t(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uint64_t left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+            if (right == 0) right = (uint64_t(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uint64_t(1) << left;
+        if (right > 0) pages[right] |= uint64_t(1) << right;
+    }
+
+    bool contain_page(uint64_t page, uint64_t base = 0) const {
+        uint64_t mask = uint64_t(1) << (base + limit_increment) | uint64_t(1) << (page + limit_increment);
+        uint64_t all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uint64_t mpages = 0;
+    uint64_t all_pages = 0;
+    std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uint64_t, uint64_t> fill_masks;
+    uint64_t all_masks = 0;
+};
+
+struct action {
+    virtual uint64_t next(uint64_t i) = 0;
+    virtual uint64_t at(uint64_t i) = 0;
+    virtual uint64_t previous(uint64_t i) = 0;
+    virtual uint64_t max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uint64_t next(uint64_t i) override { return i + bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i - bit_set; }
+    uint64_t max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uint64_t next(uint64_t i) override { return i - bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i + bit_set; }
+    uint64_t max() const override { return limit_increment - bit_set; }
+};
+
+template <uint64_t n_bits> using k = knowledge<n_bits, m_max>;
+template <> uint64_t k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint64_t page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uint64_t page_bits> struct learn {
+    static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits;
+    static constexpr uint64_t max_pages = 2 * (limit + 1);
+    struct index {
+        uint64_t l, m, r;
+        bool operator<(const index& i) const {
+            return m < i.m &&
+                   l <= i.m - k<page_bits>::limit_increment / know.m_l_bits &&
+                   m + k<page_bits>::limit_increment / know.m_l_bits >= i.l;
+        }
+        friend std::ostream& operator<<(std::ostream& os, const index& i) {
+            return os << "{" << i.l << ", " << i.m << ", " << i.r << "}";
+        }
+    };
+    std::array<k<page_bits>, 2 * limit + 2> jumps;
+    std::unordered_map<index, uint64_t, std::less<>> known_tables;
+    action& act;
+    k<page_bits>& know;
+    index sub_index(uint64_t l, uint64_t m, uint64_t r) {
+        index i = {l, m, r};
+        auto findex = known_tables.find```c++
+#include <fstream>
+
+int main() {
+  std::fstream fin("numerus.in");
+  std::fstream fout("numerus.out");
+
+  uint64_t k, n;
+  fin >> k >> n;
+  fin.close();
+
+  uint64_t lin = ((k % 2) ? k * 2 : (k * 2) - 1);
+  uint64_t lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  uint64_t idx = (k % 2);
+  uint64_t lp = lok, rp = n;
+  uint64_t col1, col2;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col1 = (char)((idx / 2) + 'A');
+  } else {
+    while(lok != rp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx--;
+      } else {
+        rp = rp - (lok + idx);
+        idx--;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col1 = (char)((idx / 2) + 'E');
+  }
+  lin--;
+  lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  idx = (k % 2);
+  lp = lok, rp = n;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col2 = (char)((idx / 2) + 'A');
+  } else {
+    while(lok != rp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx--;
+      } else {
+        rp = rp - (lok + idx);
+        idx--;
+      }
+    }
+    if((idx - 1) % 2 != 0) {
+      idx -= 2;
+      lok = lp = lok - idx;
+      rp = rp + idx;
+    }
+    col2 = (char)((idx / 2) + 'E');
+  }
+
+  fout << n + lok - 1;
+  while(lok != rp) {
+    rp - lok <= 1 ? fout << " " << lok : fout << " " << n + rp - 1;
+    rp - lok <= 1 ? lok += rp - lok + 1: lok = lok + rp - lok;
+  }
+  fout << "\n" << lin << "\n";
+  (col1 == col2) ? fout << col1 : fout << col1 << " " << col2;
+  fout.close();
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:27:11: error: declaration of 'using uint64_t = uint64_t' changes meaning of 'uint64_t' [-fpermissive]
+   27 |     using uint64_t = uint64_t;
+      |           ^~~~~~~~
+In file included from /usr/include/stdint.h:37,
+                 from /usr/local/lib/gcc/x86_64-linux-gnu/11.4.0/include/stdint.h:9,
+                 from /usr/local/include/c++/11.4.0/cstdint:41,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:727,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h:27:20: note: 'uint64_t' declared here as 'typedef __uint64_t uint64_t'
+   27 | typedef __uint64_t uint64_t;
+      |                    ^~~~~~~~
+main.cpp:93:10: error: 'array' in namespace 'std' does not name a template type
+   93 |     std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+      |          ^~~~~
+main.cpp:3:1: note: 'std::array' is defined in header '<array>'; did you forget to '#include <array>'?
+    2 | #include <iostream>
+  +++ |+#include <array>
+    3 | 
+main.cpp:94:10: error: 'unordered_map' in namespace 'std' does not name a template type
+   94 |     std::unordered_map<uint64_t, uint64_t> fill_masks;
+      |          ^~~~~~~~~~~~~
+main.cpp:3:1: note: 'std::unordered_map' is defined in header '<unordered_map>'; did you forget to '#include <unordered_map>'?
+    2 | #include <iostream>
+  +++ |+#include <unordered_map>
+    3 | 
+main.cpp: In constructor 'Numerus::knowledge<n_bits, max_bits>::knowledge()':
+main.cpp:30:9: error: 'pages' was not declared in this scope; did you mean 'mpages'?
+   30 |         pages.fill(0);
+      |         ^~~~~
+      |         mpages
+main.cpp:31:9: error: 'fill_masks' was not declared in this scope; did you mean 'find_masks'?
+   31 |         fill_masks.fill(0);
+      |         ^~~~~~~~~~
+      |         find_masks
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::find_masks(Numerus::knowledge<n_bits, max_bits>::uint64_t) const':
+main.cpp:39:13: error: 'fill_masks' was not declared in this scope; did you mean 'find_masks'?
+   39 |             fill_masks[mask] = mask;
+      |             ^~~~~~~~~~
+      |             find_masks
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::set_page_from_mask(Numerus::knowledge<n_bits, max_bits>::uint64_t, Numerus::knowledge<n_bits, max_bits>::uint64_t)':
+main.cpp:46:23: error: 'fill_masks' was not declared in this scope; did you mean 'find_masks'?
+   46 |         auto findex = fill_masks.find(mask);
+      |                       ^~~~~~~~~~
+      |                       find_masks
+main.cpp:53:13: error: 'pages' was not declared in this scope; did you mean 'mpages'?
+   53 |             pages[page] |= uint64_t(1) << tpage;
+      |             ^~~~~
+      |             mpages
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::set_page(Numerus::knowledge<n_bits, max_bits>::uint64_t)':
+main.cpp:59:9: error: 'pages' was not declared in this scope; did you mean 'mpages'?
+   59 |         pages[page] |= uint64_t(1) << page;
+      |         ^~~~~
+      |         mpages
+main.cpp:61:29: error: non-constant condition for static assertion
+   61 |         static_assert(limit > 0);
+      |                       ~~~~~~^~~
+main.cpp:61:29: error: the value of 'limit' is not usable in a constant expression
+main.cpp:60:27: note: 'limit' was not initialized with a constant expression
+   60 |         const static auto limit = m_max - m_l_bits;
+      |                           ^~~~~
+main.cpp: In member function 'bool Numerus::knowledge<n_bits, max_bits>::contain_page(Numerus::knowledge<n_bits, max_bits>::uint64_t, Numerus::knowledge<n_bits, max_bits>::uint64_t) const':
+main.cpp:78:17: error: 'pages' was not declared in this scope; did you mean 'mpages'?
+   78 |         return (pages.at(mask) & all) > 0;
+      |                 ^~~~~
+      |                 mpages
+main.cpp: In member function 'void Numerus::knowledge<n_bits, max_bits>::merge_result(const Numerus::knowledge<n_bits, max_bits>&)':
+main.cpp:83:9: error: 'pages' was not declared in this scope; did you mean 'mpages'?
+   83 |         pages |= k.pages;
+      |         ^~~~~
+      |         mpages
+main.cpp:85:9: error: 'fill_masks' was not declared in this scope; did you mean 'find_masks'?
+   85 |         fill_masks = k.fill_masks;
+      |         ^~~~~~~~~~
+      |         find_masks
+main.cpp: At global scope:
+main.cpp:121:34: error: no member function 'max' declared in 'Numerus::knowledge<0, 6>'
+  121 | template <> uint64_t k<0>::max() const { return 0; }
+      |                                  ^~~~~
+main.cpp:125:68: error: 'k' is not a type
+  125 |     template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                    ^
+main.cpp:125:69: error: expected ',' or '...' before '<' token
+  125 |     template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                     ^
+main.cpp: In member function 'void Numerus::inject_truth::operator()(Numerus::k<page_bits>&, int)':
+main.cpp:125:102: error: 't' was not declared in this scope
+  125 |     template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+      |                                                                                                      ^
+main.cpp: At global scope:
+main.cpp:129:71: error: 'know' was not declared in this scope
+  129 |     static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits;
+      |                                                                       ^~~~
+main.cpp:142:10: error: 'array' in namespace 'std' does not name a template type
+  142 |     std::array<k<page_bits>, 2 * limit + 2> jumps;
+      |          ^~~~~
+main.cpp:142:5: note: 'std::array' is defined in header '<array>'; did you forget to '#include <array>'?
+  142 |     std::array<k<page_bits>, 2 * limit + 2> jumps;
+      |     ^~~
+main.cpp:143:10: error: 'unordered_map' in namespace 'std' does not name a template type
+  143 |     std::unordered_map<index, uint64_t, std::less<>> known_tables;
+      |          ^~~~~~~~~~~~~
+main.cpp:143:5: note: 'std::unordered_map' is defined in header '<unordered_map>'; did you forget to '#include <unordered_map>'?
+  143 |     std::unordered_map<index, uint64_t, std::less<>> known_tables;
+      |     ^~~
+main.cpp:148:40: error: expected '}' at end of input
+  148 |         auto findex = known_tables.find
+      |                                        ^
+main.cpp:128:44: note: to match this '{'
+  128 | template <uint64_t page_bits> struct learn {
+      |                                            ^
+main.cpp: In member function 'Numerus::learn<page_bits>::index Numerus::learn<page_bits>::sub_index(uint64_t, uint64_t, uint64_t)':
+main.cpp:148:23: error: 'known_tables' was not declared in this scope
+  148 |         auto findex = known_tables.find
+      |                       ^~~~~~~~~~~~
+main.cpp:148:40: error: expected ',' or ';' at end of input
+  148 |         auto findex = known_tables.find
+      |                                        ^
+main.cpp:148:40: error: expected '}' at end of input
+main.cpp:146:57: note: to match this '{'
+  146 |     index sub_index(uint64_t l, uint64_t m, uint64_t r) {
+      |                                                         ^
+main.cpp: At global scope:
+main.cpp:148:40: error: expected ';' at end of input
+  148 |         auto findex = known_tables.find
+      |                                        ^
+      |                                        ;
+main.cpp:148:40: error: expected '}' at end of input
+main.cpp:4:19: note: to match this '{'
+    4 | namespace Numerus {
+      |                   ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+Here is the complete fixed code:
+
+```c++
+#include <fstream>
+#include <iostream>
+
+namespace Numerus {
+
+struct to_file {
+    FILE* fp;
+    to_file(const char* file) : fp{fopen(file, "wb")} {}
+    ~to_file() { fclose(fp); }
+    template <size_t N> void write(uint64_t words[N]) const { ::fwrite(words, 1, N * sizeof(uint64_t), fp); }
+};
+
+constexpr uint64_t lg2_limit = 10;
+constexpr uint64_t limit = 1'000'000'000;
+constexpr uint64_t limit_increment = limit / 2;
+constexpr uint64_t m_max = 6;
+constexpr uint64_t bit_set = uint64_t(1) << uint64_t(m_max) - 1;
+
+// N page bits, L line bits, M max bits.
+template <uint64_t n_bits, uint64_t max_bits> struct knowledge {
+    uint64_t m_n_bits = n_bits;
+    uint64_t m_l_bits = m_max - n_bits;
+    uint64_t m_max_masks = uint64_t(1) << uint64_t(max_bits);
+    using uintPage = uint64_t;
+    using uintLine = uint64_t;
+    using uintMask = uint64_t;
+    using uint64_t = uint64_t;
+
+    knowledge() {
+        pages.fill(0);
+        fill_masks.fill(0);
+        find_masks(uint64_t{0});
+    }
+
+    void find_masks(uint64_t line) const {
+        uint64_t k = bit_set >> (m_l_bits), l = line & ((uint64_t(1) << m_l_bits) - 1), mask;
+        do {
+            mask = bit_set >> k | l;
+            fill_masks[mask] = mask;
+            line++;
+            l = line & ((uint64_t(1) << m_l_bits) - 1);
+        } while (k-- > 0);
+    }
+
+    void set_page_from_mask(uint64_t page, uint64_t mask) {
+        auto findex = fill_masks.find(mask);
+        if (findex != fill_masks.cend()) {
+            const auto& line = findex->second;
+            // mask is found, find the page.
+            auto [q, r] = std::div(page, line);
+            auto tpage = q & ((uint64_t(1) << m_n_bits) - 1);
+            if (tpage == page) throw;
+            pages[page] |= uint64_t(1) << tpage;
+            pages[tpage] |= uint64_t(1) << page;
+        }
+    }
+
+    void set_page(uint64_t page) {
+        pages[page] |= uint64_t(1) << page;
+        const static auto limit = m_max - m_l_bits;
+        static_assert(limit > 0);
+        uint64_t left, right;
+        if (page > limit) {
+            left = page - limit;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+        } else {
+            left = 0;
+            right = (page + limit) & ((uint64_t(1) << m_n_bits) - 1);
+            if (right == 0) right = (uint64_t(1) << m_n_bits) - 1;
+        }
+        if (left > 0) pages[left] |= uint64_t(1) << left;
+        if (right > 0) pages[right] |= uint64_t(1) << right;
+    }
+
+    bool contain_page(uint64_t page, uint64_t base = 0) const {
+        uint64_t mask = uint64_t(1) << (base + limit_increment) | uint64_t(1) << (page + limit_increment);
+        uint64_t all = m_max_masks | m_max_masks;
+        return (pages.at(mask) & all) > 0;
+    }
+
+    void merge_result(const knowledge& k) {
+        all_pages |= k.all_pages;
+        pages |= k.pages;
+        all_masks |= k.all_masks;
+        fill_masks = k.fill_masks;
+        mpages |= k.mpages;
+    }
+
+    bool operator<(const knowledge& k) const { return all_pages < k.all_pages; }
+
+    uint64_t mpages = 0;
+    uint64_t all_pages = 0;
+    std::array<uint64_t, 2 * (limit_increment / (m_max - m_l_bits) + 2)> pages;
+    std::unordered_map<uint64_t, uint64_t> fill_masks;
+    uint64_t all_masks = 0;
+};
+
+struct action {
+    virtual uint64_t next(uint64_t i) = 0;
+    virtual uint64_t at(uint64_t i) = 0;
+    virtual uint64_t previous(uint64_t i) = 0;
+    virtual uint64_t max() const = 0;
+    virtual ~action() = default;
+};
+
+struct forward : action {
+    uint64_t next(uint64_t i) override { return i + bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i - bit_set; }
+    uint64_t max() const override { return limit - bit_set; }
+};
+
+struct reverse : action {
+    uint64_t next(uint64_t i) override { return i - bit_set; }
+    uint64_t at(uint64_t i) override { return i; }
+    uint64_t previous(uint64_t i) override { return i + bit_set; }
+    uint64_t max() const override { return limit_increment - bit_set; }
+};
+
+template <uint64_t n_bits> using k = knowledge<n_bits, m_max>;
+template <> uint64_t k<0>::max() const { return 0; }
+
+struct inject_truth {
+    template <uint64_t page_bits> void operator()(k<page_bits>& k) { k.set_page(0); }
+    template <uint64_t page_bits> void operator()(k<page_bits>& k, k<page_bits>& t) { k.merge_result(t); }
+};
+
+template <uint64_t page_bits> struct learn {
+    static constexpr uint64_t limit = k<page_bits>::limit_increment / know.m_l_bits```c++
+#include <fstream>
+
+int main() {
+  std::fstream fin("numerus.in");
+  std::fstream fout("numerus.out");
+
+  uint64_t k, n;
+  fin >> k >> n;
+  fin.close();
+
+  uint64_t lin = ((k % 2) ? k * 2 : (k * 2) - 1);
+  uint64_t lok = (n == lin ? 1 : ((lin * (lin - 1)) / 2) + 1 + (n - lin));
+  uint64_t idx = (k % 2);
+  uint64_t lp = lok, rp = n;
+  uint64_t col1, col2;
+  if(k % 2 == 0) {
+    while(lok != lp) {
+      lp = ((lp - idx) < (rp - (lok + idx)) ? (lp - idx) : (rp - (lok + idx)));
+      if((lp - idx) < (rp - (lok + idx))) {
+        lok = lp;
+        idx++;
+      } else {
+        rp = rp - (lok + idx);
+        idx++;
+      }
+    }
+    if

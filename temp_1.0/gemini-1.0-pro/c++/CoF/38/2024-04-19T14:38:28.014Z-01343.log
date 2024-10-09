@@ -1,0 +1,1129 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `parc.in` and write to `parc.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Un parc de formă dreptunghiulară este format din zone pietonale şi piste de biciclete. Reprezentând harta parcului într-un sistem cartezian, cu coordonata colţului stânga-jos `(0,0)`, pistele de biciclete sunt reprezentate prin dungi orizontale sau verticale colorate cu gri, iar zonele pietonale au culoarea albă, ca în figura din dreapta.
+
+Vizitatorii parcului se pot plimba liber pe zonele pietonale în orice direcţie, însă pistele de biciclete se vor traversa, în linie dreaptă,  paralel cu axele. În figura alăturată avem un parc de dimensiuni `10 x 8`, cu piste de biciclete verticale între `2` şi `4` respectiv `5` şi `8`, şi  orizontale între `0` şi `1` respectiv între `2` şi `4`. Gigel se află în punctul `A(1 , 1)` şi poate sa ajungă pe drumul cel mai scurt la prietenul lui, în punctul `B(8 , 7)` deplasându-se astfel: porneşte din punctul `(1, 1)` şi parcurge un traseu format din segmente cu extremităţile în punctele de coordonate `(1.5 , 2) (1.5, 4) (2 , 5) (4 , 5) (5 , 7)` şi în final ajunge în punctul de coordonate `(8 , 7)`. 
+
+Lungimea totală a drumului va fi aproximativ `11.4721359`.
+\
+~[parc.png]
+# Cerinţă
+Cunoscând dimensiunile parcului, coordonatele lui Gigel, coordonatele prietenului lui şi poziţiile pistelor de biciclete, să se calculeze lungimea drumului minim şi numărul drumurilor distincte de lungime minimă.
+
+# Date de intrare
+Fişierul `parc.in` conţine pe prima linie două numere naturale `Xparc` şi `Yparc` separate prin spaţiu, reprezentând dimensiunile parcului în direcţiile `Ox` respectiv `Oy`. Linia a doua va conţine patru numere separate prin spaţiu `xG, yG, xpr` şi `ypr` ce reprezintă coordonatele lui Gigel şi coordonatele prietenului lui. Linia a treia va conţine un număr natural `m`, reprezentând numărul pistelor verticale. Următoarele `m` linii vor conţine perechi de valori de pe axa `Ox` ce delimitează câte o pistă de biciclete verticală. Următoarea linie va conţine un număr natural `n`, reprezentând numărul pistelor orizontale. Următoarele `n` linii vor conţine perechi de valori de pe axa `Oy` ce delimitează câte o pistă de biciclete orizontală.
+
+# Date de ieşire
+Fişierul `parc.out` va conţine pe prima linie lungimea minimă a drumului cerut de problemă, un număr real. Linia a doua va conţine numărul drumurilor minime distincte, un număr natural. 
+
+# Restricţii şi precizări
+* `0 ≤ xG, xpr ≤ Xparc ≤ 30 000, 0 ≤ yG, ypr ≤ Yparc ≤ 30 000`;
+* `0 < m, n < 2000`;
+* perechile de numere naturale ce definesc o pistă nu sunt ordonate;
+* pistele orizontale, şi cele verticale nu sunt ordonate în fişierul de intrare;
+* două piste de aceeaşi direcţie nu se suprapun;
+* Gigel şi prietenului lui sunt pe zone pietonale (incluzând şi marginile acestora);
+* două drumuri sunt distincte dacă diferă prin cel puţin un punct;
+* numărul de drumuri distincte nu va depăşi `1 000 000 000`;
+* lungimea drumului din fişierul de ieşire este un număr real ce se va accepta cu eroare maxima de `0.01`;
+* nu se admite formatul ştiinţific pentru afişarea numerelor reale; 
+* prima cerinţă valorează `40%` din punctaj, iar a doua valorează `60%` din punctaj.
+
+---
+
+Example:
+`parc.in`
+```
+10 8
+1 1 8 7
+2
+5 8 
+2 4
+2
+4 2
+0 1
+```
+
+`parc.out`
+```
+11.472136
+1
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <cmath>
+
+using namespace std;
+
+const double eps = 0.01;
+
+struct Punct {
+  int x, y;
+  Punct() {}
+  Punct(int _x, int _y) : x(_x), y(_y) {}
+  
+  double dst(const Punct& oth) const {
+    return sqrt((x - oth.x) * (x - oth.x) + (y - oth.y) * (y - oth.y));
+  }
+};
+
+struct Strada {
+  Punct a, b;
+  double len;
+  
+  Strada() {}
+  
+  Strada(const Punct& _a, const Punct& _b): a(_a), b(_b) { recalc(); }
+  
+  void recalc() {
+    len = a.dst(b);
+    if (a.x == b.x)
+      dir = 'v';
+    else
+      dir = 'h';
+  }
+  
+  char dir;
+};
+
+vector<Strada> strazi_v, strazi_h;
+
+int n, m, xparc, yparc, x0, y0, x1, y1;
+
+const int inf = (1<<25);
+
+inline int ci(double x) {
+  return (int)(x + eps);
+}
+
+int main() {
+  ifstream fin("parc.in");
+  ofstream fout("parc.out");
+  Punct p0(0, 0), pmax;
+  
+  fin >> xparc >> yparc;
+  fin >> x0 >> y0 >> x1 >> y1;
+  
+  fin >> m;
+  for (int i = 0; i < m; i++) {
+    int x1, x2;
+    fin >> x1 >> x2;
+    pmax.x = max(pmax.x, x2);
+    p0.x=max(x0,x1);
+    strazi_v.push_back(Strada(Punct(x1, 0), Punct(x2, yparc)));
+  }
+  
+  fin >> n;
+  for (int i = 0; i < n; i++) {
+    int y1, y2;
+    fin >> y1 >> y2;
+    p0.y=max(y0,y1);
+    pmax.y = max(pmax.y, y2);
+    strazi_h.push_back(Strada(Punct(0, y1), Punct(xparc, y2)));
+  }
+  
+  fin.close();
+  
+  double rez_min = inf;
+  
+  struct nod {
+    Punct p;
+    vector< pair<double, int> > ang;  // <unghi, Strada.idx>
+    
+    friend bool operator < (const nod& lhs, const nod& rhs) {
+      return lhs.ang < rhs.ang;
+    }
+  };
+  
+  vector<vector<nod> >graf(xparc + 5, vector<nod>(yparc + 5));
+  
+  // precalculare pentru toate nodurile din interiorul parcului
+  for (int i = p0.x; i <= xparc; i++)
+    for (int j = p0.y; j <= yparc; j++) {
+      vector<double>& ang = graf[i][j].ang;
+      
+      auto add_unghi = [&](int idx, char directie) {
+        double u = atan2(i - strazi_v[idx].a.x, j - strazi_v[idx].a.y);
+        if (u < 0) u += 2 * acos(-1.0);
+        if (directie == 'S') u += acos(-1.0);
+        ang.push_back(make_pair(u, - idx - 2));
+      };
+      
+      for (int idx = 0; idx < (int) strazi_h.size(); idx++)
+        if (strazi_h[idx].a.y <= j && j <= strazi_h[idx].b.y)
+          ang.push_back(make_pair(acos(-1.0) / 2, idx + 2));
+      
+      for (int idx = 0; idx < (int) strazi_v.size(); idx++) {
+        if (strazi_v[idx].a.x <= i && i <= strazi_v[idx].b.x) {
+          add_unghi(idx, 'N');
+          if (j >= strazi_v[idx].a.y) add_unghi(idx, 'S');
+        }
+      }
+      
+      sort(ang.begin(), ang.end());
+    }
+  
+  // initializare noduri initiale
+  graf[x0][y0].p = Punct(x0, y0);
+  
+  auto cmp = [](const pair<double, int>& lhs, const pair<double, int>& rhs) {
+    return lhs.first > rhs.first;
+  };
+  
+  priority_queue<pair<double, int>, vector<pair<double, int> >, decltype(cmp)> h(cmp);
+  h.push(make_pair(0, x0 * yparc + y0));
+  int sol = 0;
+  
+  while (!h.empty()) {
+    Punct p;
+    p.y = h.top().second / yparc;
+    p.x = h.top().second % yparc;
+    double lg = -h.top().first;
+    h.pop();
+    
+    if (lg >= rez_min)
+      sol %= 1000000007;
+    if (ci(lg + eps) > ci(rez_min + eps)) {
+      rez_min = lg + eps;
+      sol = 1;
+    }
+    
+    if (p == Punct(x1, y1)) {
+      sol = (sol + 1) % 1000000007;
+      continue;
+    }
+
+    for (auto &vecini: graf[p.x][p.y].ang) {
+      Punct next;
+      if (vecini.second < 0) {
+        int idx = -vecini.second - 2;
+        double o = vecinos.first;
+        if (p.x > strazi_v[idx].a.x) o = 2 * acos(-1.0) - o;
+        double tan = tan(o);
+        next = Punct(p.x + 1, p.y + ci(tan));
+      } else {
+        int idx = vecinos.second - 2;
+        if (p.x < strazi_h[idx].a.x) o = 2 * acos(-1.0) - o;
+        double cot = tan(vecini.first);
+        next = Punct(p.x + ci(cot), p.y + 1);
+      }
+      
+      if (next.x > pmax.x && next.y > pmax.y) continue;
+      
+      double lg_next = lg + strazi_h[(next.y - 1) / 2].len;
+      int id = next.x * yparc + next.y;
+      if (fabs(lg_next + eps - graf[next.x][next.y].p.x) > eps) {
+        graf[next.x][next.y].p = next, h.push(make_pair(-lg_next, id));
+      }
+    }
+  }
+  
+  fout << rez_min << '\n';
+  fout << sol << '\n';
+  
+  fout.close();
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp:41:29: error: 'int y0' redeclared as different kind of entity
+   41 | int n, m, xparc, yparc, x0, y0, x1, y1;
+      |                             ^~
+In file included from /usr/include/features.h:461,
+                 from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/os_defines.h:39,
+                 from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/c++config.h:586,
+                 from /usr/local/include/c++/11.4.0/iosfwd:38,
+                 from /usr/local/include/c++/11.4.0/ios:38,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/include/x86_64-linux-gnu/bits/mathcalls.h:220:1: note: previous declaration 'double y0(double)'
+  220 | __MATHCALL (y0,, (_Mdouble_));
+      | ^~~~~~~~~~
+main.cpp:41:37: error: 'int y1' redeclared as different kind of entity
+   41 | int n, m, xparc, yparc, x0, y0, x1, y1;
+      |                                     ^~
+In file included from /usr/include/features.h:461,
+                 from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/os_defines.h:39,
+                 from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/c++config.h:586,
+                 from /usr/local/include/c++/11.4.0/iosfwd:38,
+                 from /usr/local/include/c++/11.4.0/ios:38,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/include/x86_64-linux-gnu/bits/mathcalls.h:221:1: note: previous declaration 'double y1(double)'
+  221 | __MATHCALL (y1,, (_Mdouble_));
+      | ^~~~~~~~~~
+main.cpp: In function 'int main()':
+main.cpp:55:13: error: no match for 'operator>>' (operand types are 'std::basic_istream<char>::__istream_type' {aka 'std::basic_istream<char>'} and 'double(double) noexcept')
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |   ~~~~~~~~~ ^~ ~~
+      |       |        |
+      |       |        double(double) noexcept
+      |       std::basic_istream<char>::__istream_type {aka std::basic_istream<char>}
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:120:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(std::basic_istream<_CharT, _Traits>::__istream_type& (*)(std::basic_istream<_CharT, _Traits>::__istream_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  120 |       operator>>(__istream_type& (*__pf)(__istream_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:120:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'std::basic_istream<char>::__istream_type& (*)(std::basic_istream<char>::__istream_type&)' {aka 'std::basic_istream<char>& (*)(std::basic_istream<char>&)'} [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:124:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(std::basic_istream<_CharT, _Traits>::__ios_type& (*)(std::basic_istream<_CharT, _Traits>::__ios_type&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>; std::basic_istream<_CharT, _Traits>::__ios_type = std::basic_ios<char>]' (near match)
+  124 |       operator>>(__ios_type& (*__pf)(__ios_type&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:124:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'std::basic_istream<char>::__ios_type& (*)(std::basic_istream<char>::__ios_type&)' {aka 'std::basic_ios<char>& (*)(std::basic_ios<char>&)'} [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:131:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(std::ios_base& (*)(std::ios_base&)) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  131 |       operator>>(ios_base& (*__pf)(ios_base&))
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:131:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'std::ios_base& (*)(std::ios_base&)' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:168:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(bool&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  168 |       operator>>(bool& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:168:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: cannot bind non-const lvalue reference of type 'bool&' to a value of type 'double (*)(double) noexcept'
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:172:7: note: candidate: 'std::basic_istream<_CharT, _Traits>& std::basic_istream<_CharT, _Traits>::operator>>(short int&) [with _CharT = char; _Traits = std::char_traits<char>]' (near match)
+  172 |       operator>>(short& __n);
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:172:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'short int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(short int)y0' to 'short int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:175:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(short unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  175 |       operator>>(unsigned short& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:175:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'short unsigned int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(short unsigned int)y0' to 'short unsigned int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:179:7: note: candidate: 'std::basic_istream<_CharT, _Traits>& std::basic_istream<_CharT, _Traits>::operator>>(int&) [with _CharT = char; _Traits = std::char_traits<char>]' (near match)
+  179 |       operator>>(int& __n);
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:179:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(int)y0' to 'int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:182:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  182 |       operator>>(unsigned int& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:182:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'unsigned int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(unsigned int)y0' to 'unsigned int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:186:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  186 |       operator>>(long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:186:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'long int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(long int)y0' to 'long int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:190:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  190 |       operator>>(unsigned long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:190:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'long unsigned int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(long unsigned int)y0' to 'long unsigned int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:195:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long long int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  195 |       operator>>(long long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:195:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'long long int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(long long int)y0' to 'long long int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:199:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long long unsigned int&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  199 |       operator>>(unsigned long long& __n)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:199:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'long long unsigned int' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(long long unsigned int)y0' to 'long long unsigned int&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:235:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(void*&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]' (near match)
+  235 |       operator>>(void*& __p)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:235:7: note:   conversion of argument 1 would be ill-formed:
+main.cpp:55:16: error: invalid conversion from 'double (*)(double) noexcept' to 'void*' [-fpermissive]
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+      |                |
+      |                double (*)(double) noexcept
+main.cpp:55:16: error: cannot bind rvalue '(void*)y0' to 'void*&'
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:214:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(float&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  214 |       operator>>(float& __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:214:25: note:   no known conversion for argument 1 from 'double(double) noexcept' to 'float&'
+  214 |       operator>>(float& __f)
+      |                  ~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:218:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(double&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  218 |       operator>>(double& __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:218:26: note:   no known conversion for argument 1 from 'double(double) noexcept' to 'double&'
+  218 |       operator>>(double& __f)
+      |                  ~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:222:7: note: candidate: 'std::basic_istream<_CharT, _Traits>::__istream_type& std::basic_istream<_CharT, _Traits>::operator>>(long double&) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__istream_type = std::basic_istream<char>]'
+  222 |       operator>>(long double& __f)
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:222:31: note:   no known conversion for argument 1 from 'double(double) noexcept' to 'long double&'
+  222 |       operator>>(long double& __f)
+      |                  ~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/istream:259:7: note: candidate: 'std::basic_istream<_CharT, _Traits>& std::basic_istream<_CharT, _Traits>::operator>>(std::basic_istream<_CharT, _Traits>::__streambuf_type*) [with _CharT = char; _Traits = std::char_traits<char>; std::basic_istream<_CharT, _Traits>::__streambuf_type = std::basic_streambuf<char>]'
+  259 |       operator>>(__streambuf_type* __sb);
+      |       ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:259:36: note:   no known conversion for argument 1 from 'double(double) noexcept' to 'std::basic_istream<char>::__streambuf_type*' {aka 'std::basic_streambuf<char>*'}
+  259 |       operator>>(__streambuf_type* __sb);
+      |                  ~~~~~~~~~~~~~~~~~~^~~~
+In file included from /usr/local/include/c++/11.4.0/string:56,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.tcc:1485:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> std::basic_istream<_CharT, _Traits>& std::operator>>(std::basic_istream<_CharT, _Traits>&, std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 1485 |     operator>>(basic_istream<_CharT, _Traits>& __in,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.tcc:1485:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   mismatched types 'std::__cxx11::basic_string<_CharT, _Traits, _Allocator>' and 'double(double) noexcept'
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/istream:1016,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/istream.tcc:958:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_istream<_CharT, _Traits>& std::operator>>(std::basic_istream<_CharT, _Traits>&, _CharT&)'
+  958 |     operator>>(basic_istream<_CharT, _Traits>& __in, _CharT& __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/istream.tcc:958:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   deduced conflicting types for parameter '_CharT' ('char' and 'double(double) noexcept')
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:756:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, unsigned char&)'
+  756 |     operator>>(basic_istream<char, _Traits>& __in, unsigned char& __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:756:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   cannot convert 'y0' (type 'double(double) noexcept') to type 'unsigned char&'
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:761:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, signed char&)'
+  761 |     operator>>(basic_istream<char, _Traits>& __in, signed char& __c)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:761:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   cannot convert 'y0' (type 'double(double) noexcept') to type 'signed char&'
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:803:5: note: candidate: 'template<class _CharT, class _Traits> std::basic_istream<_CharT, _Traits>& std::operator>>(std::basic_istream<_CharT, _Traits>&, _CharT*)'
+  803 |     operator>>(basic_istream<_CharT, _Traits>& __in, _CharT* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:803:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   deduced conflicting types for parameter '_CharT' ('char' and 'double(double) noexcept')
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:846:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, unsigned char*)'
+  846 |     operator>>(basic_istream<char, _Traits>& __in, unsigned char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:846:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   cannot convert 'y0' (type 'double(double) noexcept') to type 'unsigned char*'
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:852:5: note: candidate: 'template<class _Traits> std::basic_istream<char, _Traits>& std::operator>>(std::basic_istream<char, _Traits>&, signed char*)'
+  852 |     operator>>(basic_istream<char, _Traits>& __in, signed char* __s)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:852:5: note:   template argument deduction/substitution failed:
+main.cpp:55:16: note:   cannot convert 'y0' (type 'double(double) noexcept') to type 'signed char*'
+   55 |   fin >> x0 >> y0 >> x1 >> y1;
+      |                ^~
+In file included from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/istream:1006:5: note: candidate: 'template<class _Istream, class _Tp> _Istream&& std::operator>>(_Istream&&, _Tp&&)'
+ 1006 |     operator>>(_Istream&& __is, _Tp&& __x)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/istream:1006:5: note:   template argument deduction/substitution failed:
+/usr/local/include/c++/11.4.0/istream: In substitution of 'template<class _Istream, class _Tp> _Istream&& std::operator>>(_Istream&&, _Tp&&) [with _Istream = std::basic_istream<char>&; _Tp = double (&)(double) noexcept]':
+main.cpp:55:16:   required from here
+/usr/local/include/c++/11.4.0/istream:1006:5: error: no type named 'type' in 'struct std::enable_if<false, void>'
+main.cpp:70:13: error: no matching function for call to 'max(double (&)(double) noexcept, int&)'
+   70 |     p0.y=max(y0,y1);
+      |          ~~~^~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_algobase.h:254:5: note: candidate: 'template<class _Tp> constexpr const _Tp& std::max(const _Tp&, const _Tp&)'
+  254 |     max(const _Tp& __a, const _Tp& __b)
+      |     ^~~
+/usr/local/include/c++/11.4.0/bits/stl_algobase.h:254:5: note:   template argument deduction/substitution failed:
+main.cpp:70:13: note:   deduced conflicting types for parameter 'const _Tp' ('double(double) noexcept' and 'int')
+   70 |     p0.y=max(y0,y1);
+      |          ~~~^~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_algobase.h:300:5: note: candidate: 'template<class _Tp, class _Compare> constexpr const _Tp& std::max(const _Tp&, const _Tp&, _Compare)'
+  300 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+/usr/local/include/c++/11.4.0/bits/stl_algobase.h:300:5: note:   template argument deduction/substitution failed:
+main.cpp:70:13: note:   deduced conflicting types for parameter 'const _Tp' ('double(double) noexcept' and 'int')
+   70 |     p0.y=max(y0,y1);
+      |          ~~~^~~~~~~
+main.cpp:83:17: error: cannot define friend function 'operator<' in a local class definition
+   83 |     friend bool operator < (const nod& lhs, const nod& rhs) {
+      |                 ^~~~~~~~
+main.cpp:83:17: error: 'bool main()::nod::operator<(const main()::nod&, const main()::nod&)' must have exactly one argument
+main.cpp:93:40: error: invalid initialization of reference of type 'std::vector<double>&' from expression of type 'std::vector<std::pair<double, int> >'
+   93 |       vector<double>& ang = graf[i][j].ang;
+main.cpp: In lambda function:
+main.cpp:99:22: error: no matching function for call to 'std::vector<double>::push_back(std::pair<double, int>)'
+   99 |         ang.push_back(make_pair(u, - idx - 2));
+      |         ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1187:7: note: candidate: 'void std::vector<_Tp, _Alloc>::push_back(const value_type&) [with _Tp = double; _Alloc = std::allocator<double>; std::vector<_Tp, _Alloc>::value_type = double]'
+ 1187 |       push_back(const value_type& __x)
+      |       ^~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1187:35: note:   no known conversion for argument 1 from 'std::pair<double, int>' to 'const value_type&' {aka 'const double&'}
+ 1187 |       push_back(const value_type& __x)
+      |                 ~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1203:7: note: candidate: 'void std::vector<_Tp, _Alloc>::push_back(std::vector<_Tp, _Alloc>::value_type&&) [with _Tp = double; _Alloc = std::allocator<double>; std::vector<_Tp, _Alloc>::value_type = double]'
+ 1203 |       push_back(value_type&& __x)
+      |       ^~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1203:30: note:   no known conversion for argument 1 from 'std::pair<double, int>' to 'std::vector<double>::value_type&&' {aka 'double&&'}
+ 1203 |       push_back(value_type&& __x)
+      |                 ~~~~~~~~~~~~~^~~
+main.cpp: In function 'int main()':
+main.cpp:104:24: error: no matching function for call to 'std::vector<double>::push_back(std::pair<double, int>)'
+  104 |           ang.push_back(make_pair(acos(-1.0) / 2, idx + 2));
+      |           ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1187:7: note: candidate: 'void std::vector<_Tp, _Alloc>::push_back(const value_type&) [with _Tp = double; _Alloc = std::allocator<double>; std::vector<_Tp, _Alloc>::value_type = double]'
+ 1187 |       push_back(const value_type& __x)
+      |       ^~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1187:35: note:   no known conversion for argument 1 from 'std::pair<double, int>' to 'const value_type&' {aka 'const double&'}
+ 1187 |       push_back(const value_type& __x)
+      |                 ~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1203:7: note: candidate: 'void std::vector<_Tp, _Alloc>::push_back(std::vector<_Tp, _Alloc>::value_type&&) [with _Tp = double; _Alloc = std::allocator<double>; std::vector<_Tp, _Alloc>::value_type = double]'
+ 1203 |       push_back(value_type&& __x)
+      |       ^~~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1203:30: note:   no known conversion for argument 1 from 'std::pair<double, int>' to 'std::vector<double>::value_type&&' {aka 'double&&'}
+ 1203 |       push_back(value_type&& __x)
+      |                 ~~~~~~~~~~~~~^~~
+main.cpp:113:7: error: 'sort' was not declared in this scope; did you mean 'sqrt'?
+  113 |       sort(ang.begin(), ang.end());
+      |       ^~~~
+      |       sqrt
+main.cpp:117:12: error: invalid conversion from 'double (*)(double) noexcept' to 'std::vector<main()::nod>::size_type' {aka 'long unsigned int'} [-fpermissive]
+  117 |   graf[x0][y0].p = Punct(x0, y0);
+      |            ^~
+      |            |
+      |            double (*)(double) noexcept
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1043:28: note:   initializing argument 1 of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = main()::nod; _Alloc = std::allocator<main()::nod>; std::vector<_Tp, _Alloc>::reference = main()::nod&; std::vector<_Tp, _Alloc>::size_type = long unsigned int]'
+ 1043 |       operator[](size_type __n) _GLIBCXX_NOEXCEPT
+      |                  ~~~~~~~~~~^~~
+main.cpp:117:30: error: invalid conversion from 'double (*)(double) noexcept' to 'int' [-fpermissive]
+  117 |   graf[x0][y0].p = Punct(x0, y0);
+      |                              ^~
+      |                              |
+      |                              double (*)(double) noexcept
+main.cpp:13:21: note:   initializing argument 2 of 'Punct::Punct(int, int)'
+   13 |   Punct(int _x, int _y) : x(_x), y(_y) {}
+      |                 ~~~~^~
+main.cpp:124:34: warning: pointer to a function used in arithmetic [-Wpointer-arith]
+  124 |   h.push(make_pair(0, x0 * yparc + y0));
+      |                       ~~~~~~~~~~~^~~~
+main.cpp:124:9: error: no matching function for call to 'std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int> >, main()::<lambda(const std::pair<double, int>&, const std::pair<double, int>&)> >::push(std::pair<int, double (*)(double) noexcept>)'
+  124 |   h.push(make_pair(0, x0 * yparc + y0));
+      |   ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/queue:64,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:640:7: note: candidate: 'void std::priority_queue<_Tp, _Sequence, _Compare>::push(const value_type&) [with _Tp = std::pair<double, int>; _Sequence = std::vector<std::pair<double, int> >; _Compare = main()::<lambda(const std::pair<double, int>&, const std::pair<double, int>&)>; std::priority_queue<_Tp, _Sequence, _Compare>::value_type = std::pair<double, int>]'
+  640 |       push(const value_type& __x)
+      |       ^~~~
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:640:30: note:   no known conversion for argument 1 from 'std::pair<int, double (*)(double) noexcept>' to 'const value_type&' {aka 'const std::pair<double, int>&'}
+  640 |       push(const value_type& __x)
+      |            ~~~~~~~~~~~~~~~~~~^~~
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:648:7: note: candidate: 'void std::priority_queue<_Tp, _Sequence, _Compare>::push(std::priority_queue<_Tp, _Sequence, _Compare>::value_type&&) [with _Tp = std::pair<double, int>; _Sequence = std::vector<std::pair<double, int> >; _Compare = main()::<lambda(const std::pair<double, int>&, const std::pair<double, int>&)>; std::priority_queue<_Tp, _Sequence, _Compare>::value_type = std::pair<double, int>]'
+  648 |       push(value_type&& __x)
+      |       ^~~~
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:648:25: note:   no known conversion for argument 1 from 'std::pair<int, double (*)(double) noexcept>' to 'std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int> >, main()::<lambda(const std::pair<double, int>&, const std::pair<double, int>&)> >::value_type&&' {aka 'std::pair<double, int>&&'}
+  648 |       push(value_type&& __x)
+      |            ~~~~~~~~~~~~~^~~
+main.cpp:141:24: error: invalid conversion from 'double (*)(double) noexcept' to 'int' [-fpermissive]
+  141 |     if (p == Punct(x1, y1)) {
+      |                        ^~
+      |                        |
+      |                        double (*)(double) noexcept
+main.cpp:13:21: note:   initializing argument 2 of 'Punct::Punct(int, int)'
+   13 |   Punct(int _x, int _y) : x(_x), y(_y) {}
+      |                 ~~~~^~
+main.cpp:141:11: error: no match for 'operator==' (operand types are 'Punct' and 'Punct')
+  141 |     if (p == Punct(x1, y1)) {
+      |         ~ ^~ ~~~~~~~~~~~~~
+      |         |    |
+      |         |    Punct
+      |         Punct
+In file included from /usr/local/include/c++/11.4.0/iosfwd:40,
+                 from /usr/local/include/c++/11.4.0/ios:38,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/postypes.h:222:5: note: candidate: 'template<class _StateT> bool std::operator==(const std::fpos<_StateT>&, const std::fpos<_StateT>&)'
+  222 |     operator==(const fpos<_StateT>& __lhs, const fpos<_StateT>& __rhs)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/postypes.h:222:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::fpos<_StateT>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_pair.h:466:5: note: candidate: 'template<class _T1, class _T2> constexpr bool std::operator==(const std::pair<_T1, _T2>&, const std::pair<_T1, _T2>&)'
+  466 |     operator==(const pair<_T1, _T2>& __x, const pair<_T1, _T2>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_pair.h:466:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::pair<_T1, _T2>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:420:5: note: candidate: 'template<class _Iterator> constexpr bool std::operator==(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_Iterator>&)'
+  420 |     operator==(const reverse_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:420:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::reverse_iterator<_Iterator>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:459:5: note: candidate: 'template<class _IteratorL, class _IteratorR> constexpr bool std::operator==(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)'
+  459 |     operator==(const reverse_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:459:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::reverse_iterator<_Iterator>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1585:5: note: candidate: 'template<class _IteratorL, class _IteratorR> constexpr bool std::operator==(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)'
+ 1585 |     operator==(const move_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1585:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::move_iterator<_IteratorL>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:67,
+                 from /usr/local/include/c++/11.4.0/bits/char_traits.h:39,
+                 from /usr/local/include/c++/11.4.0/ios:40,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1648:5: note: candidate: 'template<class _Iterator> constexpr bool std::operator==(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorL>&)'
+ 1648 |     operator==(const move_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_iterator.h:1648:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::move_iterator<_IteratorL>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/string:41,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/allocator.h:218:5: note: candidate: 'template<class _T1, class _T2> bool std::operator==(const std::allocator<_CharT>&, const std::allocator<_T2>&)'
+  218 |     operator==(const allocator<_T1>&, const allocator<_T2>&)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/allocator.h:218:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::allocator<_CharT>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:535:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator==(std::basic_string_view<_CharT, _Traits>, std::basic_string_view<_CharT, _Traits>)'
+  535 |     operator==(basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:535:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:541:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator==(std::basic_string_view<_CharT, _Traits>, std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >)'
+  541 |     operator==(basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:541:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/basic_string.h:48,
+                 from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/string_view:564:5: note: candidate: 'template<class _CharT, class _Traits> constexpr bool std::operator==(std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >, std::basic_string_view<_CharT, _Traits>)'
+  564 |     operator==(__type_identity_t<basic_string_view<_CharT, _Traits>> __x,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/string_view:564:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'std::basic_string_view<_CharT, _Traits>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6226:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator==(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6226 |     operator==(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6226:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6234:5: note: candidate: 'template<class _CharT> typename __gnu_cxx::__enable_if<std::__is_char<_Tp>::__value, bool>::__type std::operator==(const std::__cxx11::basic_string<_CharT>&, const std::__cxx11::basic_string<_CharT>&)'
+ 6234 |     operator==(const basic_string<_CharT>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6234:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::__cxx11::basic_string<_CharT>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6248:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator==(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const _CharT*)'
+ 6248 |     operator==(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6248:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/string:55,
+                 from /usr/local/include/c++/11.4.0/bits/locale_classes.h:40,
+                 from /usr/local/include/c++/11.4.0/bits/ios_base.h:41,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6289:5: note: candidate: 'template<class _CharT, class _Traits, class _Alloc> bool std::operator==(const _CharT*, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)'
+ 6289 |     operator==(const _CharT* __lhs,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/basic_string.h:6289:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   mismatched types 'const _CharT*' and 'Punct'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/locale_facets.h:48,
+                 from /usr/local/include/c++/11.4.0/bits/basic_ios.h:37,
+                 from /usr/local/include/c++/11.4.0/ios:44,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/bits/streambuf_iterator.h:226:5: note: candidate: 'template<class _CharT, class _Traits> bool std::operator==(const std::istreambuf_iterator<_CharT, _Traits>&, const std::istreambuf_iterator<_CharT, _Traits>&)'
+  226 |     operator==(const istreambuf_iterator<_CharT, _Traits>& __a,
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/streambuf_iterator.h:226:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::istreambuf_iterator<_CharT, _Traits>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1892:5: note: candidate: 'template<class _Tp, class _Alloc> bool std::operator==(const std::vector<_Tp, _Alloc>&, const std::vector<_Tp, _Alloc>&)'
+ 1892 |     operator==(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1892:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::vector<_Tp, _Alloc>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/deque:67,
+                 from /usr/local/include/c++/11.4.0/queue:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_deque.h:2247:5: note: candidate: 'template<class _Tp, class _Alloc> bool std::operator==(const std::deque<_Tp, _Alloc>&, const std::deque<_Tp, _Alloc>&)'
+ 2247 |     operator==(const deque<_Tp, _Alloc>& __x, const deque<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_deque.h:2247:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::deque<_Tp, _Alloc>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/queue:64,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:344:5: note: candidate: 'template<class _Tp, class _Seq> bool std::operator==(const std::queue<_Tp, _Seq>&, const std::queue<_Tp, _Seq>&)'
+  344 |     operator==(const queue<_Tp, _Seq>& __x, const queue<_Tp, _Seq>& __y)
+      |     ^~~~~~~~
+/usr/local/include/c++/11.4.0/bits/stl_queue.h:344:5: note:   template argument deduction/substitution failed:
+main.cpp:141:26: note:   'Punct' is not derived from 'const std::queue<_Tp, _Seq>'
+  141 |     if (p == Punct(x1, y1)) {
+      |                          ^
+In file included from /usr/local/include/c++/11.4.0/bits/ios_base.h:46,
+                 from /usr/local/include/c++/11.4.0/ios:42,
+                 from /usr/local/include/c++/11.4.0/istream:38,
+                 from /usr/local/include/c++/11.4.0/fstream:38,
+                 from main.cpp:1:
+/usr/local/include/c++/11.4.0/system_error:362:3: note: candidate: 'bool std::operator==(const std::error_code&, const std::error_code&)'
+  362 |   operator==(const error_code& __lhs, const error_code& __rhs) noexcept
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:362:32: note:   no known conversion for argument 1 from 'Punct' to 'const std::error_code&'
+  362 |   operator==(const error_code& __lhs, const error_code& __rhs) noexcept
+      |              ~~~~~~~~~~~~~~~~~~^~~~~
+/usr/local/include/c++/11.4.0/system_error:368:3: note: candidate: 'bool std::operator==(const std::error_code&, const std::error_condition&)'
+  368 |   operator==(const error_code& __lhs, const error_condition& __rhs) noexcept
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:368:32: note:   no known conversion for argument 1 from 'Punct' to 'const std::error_code&'
+  368 |   operator==(const error_code& __lhs, const error_condition& __rhs) noexcept
+      |              ~~~~~~~~~~~~~~~~~~^~~~~
+/usr/local/include/c++/11.4.0/system_error:376:3: note: candidate: 'bool std::operator==(const std::error_condition&, const std::error_condition&)'
+  376 |   operator==(const error_condition& __lhs,
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:376:37: note:   no known conversion for argument 1 from 'Punct' to 'const std::error_condition&'
+  376 |   operator==(const error_condition& __lhs,
+      |              ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+/usr/local/include/c++/11.4.0/system_error:408:3: note: candidate: 'bool std::operator==(const std::error_condition&, const std::error_code&)'
+  408 |   operator==(const error_condition& __lhs, const error_code& __rhs) noexcept
+      |   ^~~~~~~~
+/usr/local/include/c++/11.4.0/system_error:408:37: note:   no known conversion for argument 1 from 'Punct' to 'const std::error_condition&'
+  408 |   operator==(const error_condition& __lhs, const error_code& __rhs) noexcept
+      |              ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+main.cpp:150:20: error: 'vecinos' was not declared in this scope; did you mean 'vecini'?
+  150 |         double o = vecinos.first;
+      |                    ^~~~~~~
+      |                    vecini
+main.cpp:152:25: error: 'tan' cannot be used as a function
+  152 |         double tan = tan(o);
+      |                      ~~~^~~
+main.cpp:155:19: error: 'vecinos' was not declared in this scope; did you mean 'vecini'?
+  155 |         int idx = vecinos.second - 2;
+      |                   ^~~~~~~
+      |                   vecini
+main.cpp:156:38: error: 'o' was not declared in this scope
+  156 |         if (p.x < strazi_h[idx].a.x) o = 2 * acos(-1.0) - o;
+      |                                      ^
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <cmath>
+
+using namespace std;
+
+const double eps = 0.01;
+
+struct Punct {
+  int x, y;
+  Punct() {}
+  Punct(int _x, int _y): x(_x), y(_y) {}
+  
+  double dst(const Punct& oth) const {
+    return sqrt((x - oth.x) * (x - oth.x) + (y - oth.y) * (y - oth.y));
+  }
+};
+
+struct Strada {
+  Punct a, b;
+  double len;
+  
+  Strada() {}
+  
+  Strada(const Punct& _a, const Punct& _b): a(_a), b(_b) { recalc(); }
+  
+  void recalc() {
+    len = a.dst(b);
+    if (a.x == b.x)
+      dir = 'v';
+    else
+      dir = 'h';
+  }
+  
+  char dir;
+};
+
+vector<Strada> strazi_v, strazi_h;
+
+int n, m, xparc, yparc, x0, y0, x1, y1;
+
+const int inf = (1<<25);
+
+inline int ci(double x) {
+  return (int)(x + eps);
+}
+
+int main() {
+  ifstream fin("parc.in");
+  ofstream fout("parc.out");
+  Punct p0(0, 0), pmax;
+  
+  fin >> xparc >> yparc;
+  fin >> x0 >> y0 >> x1 >> y1;
+  
+  fin >> m;
+  for (int i = 0; i < m; i++) {
+    int x1, x2;
+    fin >> x1 >> x2;
+    pmax.x = max(pmax.x, x2);
+    strazi_v.push_back(Strada(Punct(x1, 0), Punct(x2, yparc)));
+  }
+  
+  fin >> n;
+  for (int i = 0; i < n; i++) {
+    int y1, y2;
+    fin >> y1 >> y2;
+    p0.y=max(y0,y1);
+    pmax.y = max(pmax.y, y2);
+    strazi_h.push_back(Strada(Punct(0, y1), Punct(xparc, y2)));
+  }
+  
+  fin.close();
+  
+  double rez_min = inf;
+  
+  struct nod {
+    Punct p;
+    vector< pair<double, int> > ang;  // <unghi, Strada.idx>
+    
+    friend bool operator < (const nod& lhs, const nod& rhs) {
+      return lhs.ang < rhs.ang;
+    }
+  };
+  
+  vector<vector<nod> >graf(xparc + 5, vector<nod>(yparc + 5));
+  
+  // precalculare pentru toate nodurile din interiorul parcului
+  for (int i = p0.x; i <= xparc; i++)
+    for (int j = p0.y; j <= yparc; j++) {
+      vector<double>& ang = graf[i][j].ang;
+      
+      auto add_unghi = [&](int idx, char directie) {
+        double u = atan2(i - strazi_v[idx].a.x, j - strazi_v[idx].a.y);
+        if (u < 0) u += 2 * acos(-1.0);
+        if (directie == 'S') u += acos(-1.0);
+        ang.push_back(make_pair(u, - idx - 2));
+      };
+      
+      for (int idx = 0; idx < (int) strazi_h.size(); idx++)
+        if (strazi_h[idx].a.y <= j && j <= strazi_h[idx].b.y)
+          ang.push_back(make_pair(acos(-1.0) / 2, idx + 2));
+      
+      for (int idx = 0; idx < (int) strazi_v.size(); idx++) {
+        if (strazi_v[idx].a.x <= i && i <= strazi_v[idx].b.x) {
+          add_unghi(idx, 'N');
+          if (j >= strazi_v[idx].a.y) add_unghi(idx, 'S');
+        }
+      }
+      
+      sort(ang.begin(), ang.end());
+    }
+  
+  // initializare noduri initiale
+  graf[x0][y0].p = Punct(x0, y0);
+  
+  auto cmp = [](const pair<double, int>& lhs, const pair<double, int>& rhs) {
+    return lhs.first > rhs.first;
+  };
+  
+  priority_queue<pair<double, int>, vector<pair<double, int> >, decltype(cmp)> h(cmp);
+  h.push(make_pair(0, x0 * yparc + y0));
+  int sol = 0;
+  
+  while (!h.empty()) {
+    Punct p;
+    p.y = h.top().second / yparc;
+    p.x = h.top().second % yparc;
+    double lg = -h.top().first;
+    h.pop();
+    
+    if (lg >= rez_min * (1 - eps))
+      sol = (sol + 1) % 1000000007;
+    if (ci(lg + eps) > ci(rez_min + eps)) {
+      rez_min = lg + eps;
+      sol = 1;
+    }
+    
+    if (p == Punct(x1, y1)) {
+      sol = (sol + 1) % 1000000007;
+      continue;
+    }
+
+    for (auto &vecini: graf[p.x][p.y].ang) {
+      Punct next;
+      if (vecini.second < 0) {
+        int idx = -vecini.second - 2;
+        double o = vecinos.first;
+        int x3 = p.x + 1;
+        int y3 = p.y + ci(tan(o));
+        next = Punct(x3, y3);
+      } else {
+        int idx = vecinos.second - 2;
+        int x3 = p.x + ci(strazi_h[idx].len);
+        int y3 = p.y;
+        next = Punct(x3, y3);
+      }
+      
+      if (next.x > pmax.x || next.y > pmax.y) continue;
+      
+      double lg_next = lg + strazi_h[(next.y - 1) / 2].len;
+      int id = next.x * yparc + next.y;
+      if (fabs(lg_next + eps - graf[next.x][next.y].p.x) > eps) {
+        graf[next.x][next.y].p = next, h.push(make_pair(-lg_next, id));
+      }
+    }
+  }
+  
+  fout << rez_min << '\n';
+  fout << sol << '\n';
+  
+  fout.close();
+  return 0;
+}
+```

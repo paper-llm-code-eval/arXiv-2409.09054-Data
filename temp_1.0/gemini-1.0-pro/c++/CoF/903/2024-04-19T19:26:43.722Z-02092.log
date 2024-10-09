@@ -1,0 +1,1181 @@
+---------- user ----------
+
+Here is a programming challenge. Points will be awarded for fastest code execution.
+Create the most efficient solution for this challenge in c++. The code must compile and be correct.
+The solution must read from `abx.in` and write to `abx.out`.
+The solution must not use `cin >>` or `cout <<` or `printf()` or `scanf()` to read input data or write output data.
+
+The solution must be written in a markdown code block.
+
+---
+
+Un număr natural $n$ se numește putere dacă există două numere naturale $a$, $b$, $a \geq 1$, $b \geq 2$ astfel încât $n = a^b$. De exemplu, numerele $32$, $169$, $1$ sunt puteri ($32=2^5$, $169=13^2$, $1=1^2$), iar $72$, $2000$ și $31$ nu sunt puteri.
+Se citesc numerele naturale $N$, $M$ și un șir de $N$ numere naturale $x_1, x_2, \dots, x_N$ din intervalul $[1,M]$.
+
+# Cerință
+Pentru fiecare din cele $N$ numere $x_i$ determinați câte un număr natural $r_i$ din intervalul $[1,M]$, cu proprietatea că $r_i$ este o putere și pentru orice altă putere $p$ din intervalul $[1,M]$ este îndeplinită condiția $|x_i – r_i| \leq |x_i – p|$, unde $|x|$ reprezintă valoarea absolută a lui $x$ (modulul).
+Dacă există două puteri egal depărtate de $x_i$ se va alege puterea cea mai mică. De exemplu pentru numărul $26$, dintre puterile $25$ și $27$ va fi ales numărul $25$.
+
+# Date de intrare
+Fișierul de intrare `abx.in` conține pe prima linie două numere $N$ și $M$, iar pe fiecare dintre următoarele $N$ linii se găsește câte un număr natural $x_i$ ($1 \leq i \leq N$), cu semnificația de mai sus.
+Numerele aflate pe aceeași linie a fișierului sunt separate prin câte un spațiu.
+
+# Date de ieșire
+Fișierul de ieșire `abx.out` va conține $N$ linii, pe fiecare linie $i$ ($1 \leq i \leq N$) aflându-se numărul natural $r_i$ cu semnificația din enunț.
+
+# Restricții și precizări
+- $1 \leq N \leq 5\ 000$
+- $10 \leq M \leq 10^{18}$
+- Pentru teste valorând 40 de puncte, $M \leq 5\ 000$.
+- Pentru teste valorând 70 de puncte, $M \leq 10^9$.
+
+---
+
+Example:
+`abx.in`
+```
+8 1000
+345
+99
+999
+500
+123
+124
+99
+256
+```
+
+`abx.out`
+```
+343
+100
+1000
+512
+121
+125
+100
+256
+```
+
+
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:
+---------- assistant ----------
+
+Before writing my solution in c++, I will think about the challenge step by step, come up with the most optimal solution, then I will verify the logic against the example.
+Here are all the necessary steps to solve the challenge:```c++
+#include <cstdio>
+#include <vector>
+
+using namespace std;
+typedef long long ll;
+
+const ll MAX_N = 5001, MAX_M = 1e18 + 1;
+const ll MAX_B = 1e6 + 1;
+
+int n, m;
+vector<ll> a, p[MAX_B];
+
+// generate prime powers
+void gen_primes() {
+  for (ll i = 2; i < MAX_B; i++) {
+    if (p[i].size() == 0) {
+      for (ll j = i * i; j < MAX_B; j += i) { p[j].push_back(i); }
+    }
+  }
+}
+
+// store triplets (prime, power, index) for further processing
+vector<tuple<int, int, int>> facts;
+
+inline ll pwr(ll x, ll p) {
+  ll ans = 1;
+  for (; p > 0; p >>= 1) {
+    if (p & 1) ans *= x;
+    x *= x;
+  }
+  return ans;
+}
+
+struct Query {
+  ll val;
+  ll l, r; // boundaries for binary search
+  ll& ans;
+  inline bool operator<(const Query& other) const { return val < other.val; }
+};
+
+int main() {
+  freopen("abx.in", "r", stdin);
+  freopen("abx.out", "w", stdout);
+  ios_base::sync_with_stdio(0);
+  cin.tie(0);
+  cout.tie(0);
+  cin >> n >> m;
+
+  a.resize(n);
+  for (ll i = 0; i < n; i++) cin >> a[i];
+
+  // decomposition
+  gen_primes();
+  for (ll i = 0; i < n; i++) {
+    ll x = a[i];
+    for (ll& divisor : p[x]) {
+      int pow = 0;
+      while (x % divisor == 0) x /= divisor, pow++;
+      facts.emplace_back(divisor, pow, i);
+    }
+    if (x > 1) facts.emplace_back(x, 1, i);
+  }
+  // sorting queries is key to avoid TLE
+  sort(facts.begin(), facts.end());
+
+  int queries = 0;
+  vector<Query> q;
+
+  // compute binary search for each factor
+  for (ll i = 0; i < facts.size(); i++) {
+    int pme, pwr, pos;
+    tie(pme, pwr, pos) = facts[i];
+    while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      tie(ignore, pwr, pos) = facts[++i];
+    }
+    ll lo = (pme == 2 ? 3 : 2), hi = m / pwr + 1;
+    Query qr = {a[pos], lo / pwr * pwr + pwr, hi / pwr * pwr - pwr,
+                 a[pos]};
+    if (!q.empty() && q.back().val == qr.val) {
+      q.back().r = qr.r;
+    } else {
+      q.push_back(qr);
+      queries++;
+    }
+  }
+
+  // perform binary search
+  vector<ll> ans(queries);
+  for (ll qi = 0; qi < queries; qi++) {
+    Query& qr = q[qi];
+    while (qr.l <= qr.r) {
+      ll mid = (qr.l + qr.r) >> 1;
+      ll cur = pwr(qr.val / mid, mid);
+      if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+        qr.ans = mid;
+      }
+      if (cur < a[qr.ans]) {
+        qr.r = mid - 1;
+      } else {
+        qr.l = mid + 1;
+      }
+    }
+    ans[qi] = pwr(qr.val / qr.ans, qr.ans);
+  }
+
+  // write back answers
+  for (ll qr : ans) cout << qr << '\n';
+
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'int main()':
+main.cpp:44:3: error: 'ios_base' has not been declared
+   44 |   ios_base::sync_with_stdio(0);
+      |   ^~~~~~~~
+main.cpp:45:3: error: 'cin' was not declared in this scope
+   45 |   cin.tie(0);
+      |   ^~~
+main.cpp:3:1: note: 'std::cin' is defined in header '<iostream>'; did you forget to '#include <iostream>'?
+    2 | #include <vector>
+  +++ |+#include <iostream>
+    3 | 
+main.cpp:46:3: error: 'cout' was not declared in this scope
+   46 |   cout.tie(0);
+      |   ^~~~
+main.cpp:46:3: note: 'std::cout' is defined in header '<iostream>'; did you forget to '#include <iostream>'?
+main.cpp:64:3: error: 'sort' was not declared in this scope; did you mean 'short'?
+   64 |   sort(facts.begin(), facts.end());
+      |   ^~~~
+      |   short
+main.cpp:72:5: error: 'tie' was not declared in this scope
+   72 |     tie(pme, pwr, pos) = facts[i];
+      |     ^~~
+main.cpp:3:1: note: 'std::tie' is defined in header '<tuple>'; did you forget to '#include <tuple>'?
+    2 | #include <vector>
+  +++ |+#include <tuple>
+    3 | 
+main.cpp:73:36: error: 'get' was not declared in this scope; did you mean 'getw'?
+   73 |     while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      |                                    ^~~
+      |                                    getw
+main.cpp:74:11: error: 'ignore' was not declared in this scope
+   74 |       tie(ignore, pwr, pos) = facts[++i];
+      |           ^~~~~~
+main.cpp:94:11: error: 'llabs' was not declared in this scope
+   94 |       if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:487:7:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:336:49: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+  336 |                       _M_impl._M_end_of_storage - _M_impl._M_start);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<class _Tp, class ... _Args> using __is_nothrow_constructible_impl = std::__bool_constant<__is_nothrow_constructible(_Tp)> [with _Tp = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}]':
+/usr/local/include/c++/11.4.0/type_traits:1022:12:   required from 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1017:25: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1017 |       = __bool_constant<__is_nothrow_constructible(_Tp, _Args...)>;
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1025:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+ 1025 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:1025:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/ext/alloc_traits.h:34,
+                 from /usr/local/include/c++/11.4.0/bits/stl_uninitialized.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:66,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h: In instantiation of 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:64: error: 'value' is not a member of 'std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>'
+  513 |         noexcept(std::is_nothrow_constructible<_Up, _Args...>::value)
+      |                                                                ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:72,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/vector.tcc: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]':
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/bits/vector.tcc:117:29: error: cannot increment a pointer to incomplete type 'std::tuple<int, int, int>'
+  117 |             ++this->_M_impl._M_finish;
+      |               ~~~~~~~~~~~~~~^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<class _Tp, class ... _Args> using __is_nothrow_constructible_impl = std::__bool_constant<__is_nothrow_constructible(_Tp)> [with _Tp = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}]':
+/usr/local/include/c++/11.4.0/type_traits:1022:12:   required from 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1017:25: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1017 |       = __bool_constant<__is_nothrow_constructible(_Tp, _Args...)>;
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1025:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+ 1025 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:1025:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/ext/alloc_traits.h:34,
+                 from /usr/local/include/c++/11.4.0/bits/stl_uninitialized.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:66,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h: In instantiation of 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:64: error: 'value' is not a member of 'std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>'
+  513 |         noexcept(std::is_nothrow_constructible<_Up, _Args...>::value)
+      |                                                                ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:72,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/vector.tcc: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]':
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/bits/vector.tcc:117:29: error: cannot increment a pointer to incomplete type 'std::tuple<int, int, int>'
+  117 |             ++this->_M_impl._M_finish;
+      |               ~~~~~~~~~~~~~~^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::size() const [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::size_type = long unsigned int]':
+main.cpp:70:32:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:919:50: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+  919 |       { return size_type(this->_M_impl._M_finish - this->_M_impl._M_start); }
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&; std::vector<_Tp, _Alloc>::size_type = long unsigned int]':
+main.cpp:72:33:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1046:41: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1046 |         return *(this->_M_impl._M_start + __n);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/c++allocator.h:33,
+                 from /usr/local/include/c++/11.4.0/bits/allocator.h:46,
+                 from /usr/local/include/c++/11.4.0/vector:64,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/ext/new_allocator.h: In instantiation of 'void __gnu_cxx::new_allocator<_Tp>::deallocate(_Tp*, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = std::tuple<int, int, int>; __gnu_cxx::new_allocator<_Tp>::size_type = long unsigned int]':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:496:23:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >; std::allocator_traits<std::allocator<_Tp1> >::pointer = std::tuple<int, int, int>*; std::allocator_traits<std::allocator<_Tp1> >::size_type = long unsigned int]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:354:19:   required from 'void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::_Vector_base<_Tp, _Alloc>::pointer = std::tuple<int, int, int>*; std::size_t = long unsigned int]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:335:2:   required from 'std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:487:7:   required from here
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:135:13: error: invalid application of '__alignof__' to incomplete type 'std::tuple<int, int, int>'
+  135 |         if (alignof(_Tp) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+      |             ^~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:139:37: error: invalid application of 'sizeof' to incomplete type 'std::tuple<int, int, int>'
+  139 |                               __t * sizeof(_Tp),
+      |                                     ^~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:141:48: error: invalid application of '__alignof__' to incomplete type 'std::tuple<int, int, int>'
+  141 |                               std::align_val_t(alignof(_Tp)));
+      |                                                ^~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:147:35: error: invalid application of 'sizeof' to incomplete type 'std::tuple<int, int, int>'
+  147 |                           , __t * sizeof(_Tp)
+      |                                   ^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_destructible<std::tuple<int, int, int> >':
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = std::tuple<int, int, int>*]'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:848:15:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = std::tuple<int, int, int>*; _Tp = std::tuple<int, int, int>]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:680:15:   required from 'std::vector<_Tp, _Alloc>::~vector() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+main.cpp:23:30:   required from here
+/usr/local/include/c++/11.4.0/type_traits:885:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+  885 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:885:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/vector:65,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_construct.h: In instantiation of 'void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = std::tuple<int, int, int>*]':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:848:15:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = std::tuple<int, int, int>*; _Tp = std::tuple<int, int, int>]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:680:15:   required from 'std::vector<_Tp, _Alloc>::~vector() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+main.cpp:23:30:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51: error: static assertion failed: value type is destructible
+  188 |       static_assert(is_destructible<_Value_type>::value,
+      |                                                   ^~~~~
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51: note: 'std::integral_constant<bool, false>::value' evaluates to false
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:195:25: error: invalid use of incomplete type 'std::iterator_traits<std::tuple<int, int, int>*>::value_type' {aka 'class std::tuple<int, int, int>'}
+  195 |       std::_Destroy_aux<__has_trivial_destructor(_Value_type)>::
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'std::iterator_traits<std::tuple<int, int, int>*>::value_type' {aka 'class std::tuple<int, int, int>'}
+   45 |     class tuple;
+      |           ^~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <cstdio>
+#include <vector>
+
+using namespace std;
+typedef long long ll;
+
+const ll MAX_N = 5001, MAX_M = 1e18 + 1;
+const ll MAX_B = 1e6 + 1;
+
+int n, m;
+vector<ll> a, p[MAX_B];
+
+// generate prime powers
+void gen_primes() {
+  for (ll i = 2; i < MAX_B; i++) {
+    if (p[i].size() == 0) {
+      for (ll j = i * i; j < MAX_B; j += i) { p[j].push_back(i); }
+    }
+  }
+}
+
+// store triplets (prime, power, index) for further processing
+vector<tuple<int, int, int>> facts;
+
+inline ll pwr(ll x, ll p) {
+  ll ans = 1;
+  for (; p > 0; p >>= 1) {
+    if (p & 1) ans *= x;
+    x *= x;
+  }
+  return ans;
+}
+
+struct Query {
+  ll val;
+  ll l, r; // boundaries for binary search
+  ll& ans;
+  inline bool operator<(const Query& other) const { return val < other.val; }
+};
+
+int main() {
+  freopen("abx.in", "r", stdin);
+  freopen("abx.out", "w", stdout);
+  ios_base::sync_with_stdio(0);
+  cin.tie(0);
+  cout.tie(0);
+  cin >> n >> m;
+
+  a.resize(n);
+  for (ll i = 0; i < n; i++) cin >> a[i];
+
+  // decomposition
+  gen_primes();
+  for (ll i = 0; i < n; i++) {
+    ll x = a[i];
+    for (ll& divisor : p[x]) {
+      int pow = 0;
+      while (x % divisor == 0) x /= divisor, pow++;
+      facts.emplace_back(divisor, pow, i);
+    }
+    if (x > 1) facts.emplace_back(x, 1, i);
+  }
+  // sorting queries is key to avoid TLE
+  sort(facts.begin(), facts.end());
+
+  int queries = 0;
+  vector<Query> q;
+
+  // compute binary search for each factor
+  for (ll i = 0; i < facts.size(); i++) {
+    int pme, pwr, pos;
+    tie(pme, pwr, pos) = facts[i];
+    while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      tie(ignore, pwr, pos) = facts[++i];
+    }
+    ll lo = (pme == 2 ? 3 : 2), hi = m / pwr + 1;
+    Query qr = {a[pos], lo / pwr * pwr + pwr, hi / pwr * pwr - pwr,
+                 a[pos]};
+    if (!q.empty() && q.back().val == qr.val) {
+      q.back().r = qr.r;
+    } else {
+      q.push_back(qr);
+      queries++;
+    }
+  }
+
+  // perform binary search
+  vector<ll> ans(queries);
+  for (ll qi = 0; qi < queries; qi++) {
+    Query& qr = q[qi];
+    while (qr.l <= qr.r) {
+      ll mid = (qr.l + qr.r) >> 1;
+      ll cur = pwr(qr.val / mid, mid);
+      if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+        qr.ans = mid;
+      }
+      if (cur < a[qr.ans]) {
+        qr.r = mid - 1;
+      } else {
+        qr.l = mid + 1;
+      }
+    }
+    ans[qi] = pwr(qr.val / qr.ans, qr.ans);
+  }
+
+  // write back answers
+  for (ll qr : ans) cout << qr << '\n';
+
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'int main()':
+main.cpp:44:3: error: 'ios_base' has not been declared
+   44 |   ios_base::sync_with_stdio(0);
+      |   ^~~~~~~~
+main.cpp:45:3: error: 'cin' was not declared in this scope
+   45 |   cin.tie(0);
+      |   ^~~
+main.cpp:3:1: note: 'std::cin' is defined in header '<iostream>'; did you forget to '#include <iostream>'?
+    2 | #include <vector>
+  +++ |+#include <iostream>
+    3 | 
+main.cpp:46:3: error: 'cout' was not declared in this scope
+   46 |   cout.tie(0);
+      |   ^~~~
+main.cpp:46:3: note: 'std::cout' is defined in header '<iostream>'; did you forget to '#include <iostream>'?
+main.cpp:64:3: error: 'sort' was not declared in this scope; did you mean 'short'?
+   64 |   sort(facts.begin(), facts.end());
+      |   ^~~~
+      |   short
+main.cpp:72:5: error: 'tie' was not declared in this scope
+   72 |     tie(pme, pwr, pos) = facts[i];
+      |     ^~~
+main.cpp:3:1: note: 'std::tie' is defined in header '<tuple>'; did you forget to '#include <tuple>'?
+    2 | #include <vector>
+  +++ |+#include <tuple>
+    3 | 
+main.cpp:73:36: error: 'get' was not declared in this scope; did you mean 'getw'?
+   73 |     while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      |                                    ^~~
+      |                                    getw
+main.cpp:74:11: error: 'ignore' was not declared in this scope
+   74 |       tie(ignore, pwr, pos) = facts[++i];
+      |           ^~~~~~
+main.cpp:94:11: error: 'llabs' was not declared in this scope
+   94 |       if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:487:7:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:336:49: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+  336 |                       _M_impl._M_end_of_storage - _M_impl._M_start);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<class _Tp, class ... _Args> using __is_nothrow_constructible_impl = std::__bool_constant<__is_nothrow_constructible(_Tp)> [with _Tp = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}]':
+/usr/local/include/c++/11.4.0/type_traits:1022:12:   required from 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1017:25: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1017 |       = __bool_constant<__is_nothrow_constructible(_Tp, _Args...)>;
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1025:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+ 1025 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:1025:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/ext/alloc_traits.h:34,
+                 from /usr/local/include/c++/11.4.0/bits/stl_uninitialized.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:66,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h: In instantiation of 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:64: error: 'value' is not a member of 'std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>'
+  513 |         noexcept(std::is_nothrow_constructible<_Up, _Args...>::value)
+      |                                                                ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:72,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/vector.tcc: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]':
+main.cpp:59:25:   required from here
+/usr/local/include/c++/11.4.0/bits/vector.tcc:117:29: error: cannot increment a pointer to incomplete type 'std::tuple<int, int, int>'
+  117 |             ++this->_M_impl._M_finish;
+      |               ~~~~~~~~~~~~~~^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<class _Tp, class ... _Args> using __is_nothrow_constructible_impl = std::__bool_constant<__is_nothrow_constructible(_Tp)> [with _Tp = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}]':
+/usr/local/include/c++/11.4.0/type_traits:1022:12:   required from 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1017:25: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1017 |       = __bool_constant<__is_nothrow_constructible(_Tp, _Args...)>;
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1025:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+ 1025 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:1025:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/ext/alloc_traits.h:34,
+                 from /usr/local/include/c++/11.4.0/bits/stl_uninitialized.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:66,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h: In instantiation of 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:64: error: 'value' is not a member of 'std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>'
+  513 |         noexcept(std::is_nothrow_constructible<_Up, _Args...>::value)
+      |                                                                ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:72,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/vector.tcc: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]':
+main.cpp:61:34:   required from here
+/usr/local/include/c++/11.4.0/bits/vector.tcc:117:29: error: cannot increment a pointer to incomplete type 'std::tuple<int, int, int>'
+  117 |             ++this->_M_impl._M_finish;
+      |               ~~~~~~~~~~~~~~^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::size() const [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::size_type = long unsigned int]':
+main.cpp:70:32:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:919:50: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+  919 |       { return size_type(this->_M_impl._M_finish - this->_M_impl._M_start); }
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&; std::vector<_Tp, _Alloc>::size_type = long unsigned int]':
+main.cpp:72:33:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1046:41: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1046 |         return *(this->_M_impl._M_start + __n);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/c++allocator.h:33,
+                 from /usr/local/include/c++/11.4.0/bits/allocator.h:46,
+                 from /usr/local/include/c++/11.4.0/vector:64,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/ext/new_allocator.h: In instantiation of 'void __gnu_cxx::new_allocator<_Tp>::deallocate(_Tp*, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = std::tuple<int, int, int>; __gnu_cxx::new_allocator<_Tp>::size_type = long unsigned int]':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:496:23:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >; std::allocator_traits<std::allocator<_Tp1> >::pointer = std::tuple<int, int, int>*; std::allocator_traits<std::allocator<_Tp1> >::size_type = long unsigned int]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:354:19:   required from 'void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::_Vector_base<_Tp, _Alloc>::pointer = std::tuple<int, int, int>*; std::size_t = long unsigned int]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:335:2:   required from 'std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:487:7:   required from here
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:135:13: error: invalid application of '__alignof__' to incomplete type 'std::tuple<int, int, int>'
+  135 |         if (alignof(_Tp) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+      |             ^~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:139:37: error: invalid application of 'sizeof' to incomplete type 'std::tuple<int, int, int>'
+  139 |                               __t * sizeof(_Tp),
+      |                                     ^~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:141:48: error: invalid application of '__alignof__' to incomplete type 'std::tuple<int, int, int>'
+  141 |                               std::align_val_t(alignof(_Tp)));
+      |                                                ^~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:147:35: error: invalid application of 'sizeof' to incomplete type 'std::tuple<int, int, int>'
+  147 |                           , __t * sizeof(_Tp)
+      |                                   ^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_destructible<std::tuple<int, int, int> >':
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = std::tuple<int, int, int>*]'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:848:15:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = std::tuple<int, int, int>*; _Tp = std::tuple<int, int, int>]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:680:15:   required from 'std::vector<_Tp, _Alloc>::~vector() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+main.cpp:23:30:   required from here
+/usr/local/include/c++/11.4.0/type_traits:885:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+  885 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:885:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/vector:65,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/bits/stl_construct.h: In instantiation of 'void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = std::tuple<int, int, int>*]':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:848:15:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = std::tuple<int, int, int>*; _Tp = std::tuple<int, int, int>]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:680:15:   required from 'std::vector<_Tp, _Alloc>::~vector() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+main.cpp:23:30:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51: error: static assertion failed: value type is destructible
+  188 |       static_assert(is_destructible<_Value_type>::value,
+      |                                                   ^~~~~
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51: note: 'std::integral_constant<bool, false>::value' evaluates to false
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:195:25: error: invalid use of incomplete type 'std::iterator_traits<std::tuple<int, int, int>*>::value_type' {aka 'class std::tuple<int, int, int>'}
+  195 |       std::_Destroy_aux<__has_trivial_destructor(_Value_type)>::
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:2:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'std::iterator_traits<std::tuple<int, int, int>*>::value_type' {aka 'class std::tuple<int, int, int>'}
+   45 |     class tuple;
+      |           ^~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+using namespace std;
+typedef long long ll;
+
+const ll MAX_N = 5001, MAX_M = 1e18 + 1;
+const ll MAX_B = 1e6 + 1;
+
+int n, m;
+vector<ll> a, p[MAX_B];
+
+// generate prime powers
+void gen_primes() {
+  for (ll i = 2; i < MAX_B; i++) {
+    if (p[i].size() == 0) {
+      for (ll j = i * i; j < MAX_B; j += i) { p[j].push_back(i); }
+    }
+  }
+}
+
+// store triplets (prime, power, index) for further processing
+vector<tuple<int, int, int>> facts;
+
+inline ll pwr(ll x, ll p) {
+  ll ans = 1;
+  for (; p > 0; p >>= 1) {
+    if (p & 1) ans *= x;
+    x *= x;
+  }
+  return ans;
+}
+
+struct Query {
+  ll val;
+  ll l, r; // boundaries for binary search
+  ll& ans;
+  inline bool operator<(const Query& other) const { return val < other.val; }
+};
+
+int main() {
+  freopen("abx.in", "r", stdin);
+  freopen("abx.out", "w", stdout);
+  cin.tie(0);
+  cout.tie(0);
+  cin >> n >> m;
+  a.resize(n);
+  for (ll i = 0; i < n; i++) cin >> a[i];
+  gen_primes();
+  for (ll i = 0; i < n; i++) {
+    ll x = a[i];
+    for (ll& divisor : p[x]) {
+      int pow = 0;
+      while (x % divisor == 0) x /= divisor, pow++;
+      facts.emplace_back(divisor, pow, i);
+    }
+    if (x > 1) facts.emplace_back(x, 1, i);
+  }
+  sort(facts.begin(), facts.end());
+  int queries = 0;
+  vector<Query> q;
+  for (ll i = 0; i < facts.size(); i++) {
+    int pme, pwr, pos;
+    tie(pme, pwr, pos) = facts[i];
+    while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      tie(ignore, pwr, pos) = facts[++i];
+    }
+    ll lo = (pme == 2 ? 3 : 2), hi = m / pwr + 1;
+    Query qr = {a[pos], lo / pwr * pwr + pwr, hi / pwr * pwr - pwr,
+                 a[pos]};
+    if (!q.empty() && q.back().val == qr.val) {
+      q.back().r = qr.r;
+    } else {
+      q.push_back(qr);
+      queries++;
+    }
+  }
+
+  vector<ll> ans(queries);
+  for (ll qi = 0; qi < queries; qi++) {
+    Query& qr = q[qi];
+    while (qr.l <= qr.r) {
+      ll mid = (qr.l + qr.r) >> 1;
+      ll cur = pwr(qr.val / mid, mid);
+      if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+        qr.ans = mid;
+      }
+      if (cur < a[qr.ans]) {
+        qr.r = mid - 1;
+      } else {
+        qr.l = mid + 1;
+      }
+    }
+    ans[qi] = pwr(qr.val / qr.ans, qr.ans);
+  }
+
+  for (ll qr : ans) cout << qr << '\n';
+
+  return 0;
+}
+```
+---------- user ----------
+
+
+Failed to compile the program.
+```
+main.cpp: In function 'int main()':
+main.cpp:45:3: error: 'cin' was not declared in this scope
+   45 |   cin.tie(0);
+      |   ^~~
+main.cpp:4:1: note: 'std::cin' is defined in header '<iostream>'; did you forget to '#include <iostream>'?
+    3 | #include <vector>
+  +++ |+#include <iostream>
+    4 | 
+main.cpp:46:3: error: 'cout' was not declared in this scope
+   46 |   cout.tie(0);
+      |   ^~~~
+main.cpp:46:3: note: 'std::cout' is defined in header '<iostream>'; did you forget to '#include <iostream>'?
+main.cpp:60:3: error: 'sort' was not declared in this scope; did you mean 'short'?
+   60 |   sort(facts.begin(), facts.end());
+      |   ^~~~
+      |   short
+main.cpp:65:5: error: 'tie' was not declared in this scope
+   65 |     tie(pme, pwr, pos) = facts[i];
+      |     ^~~
+main.cpp:4:1: note: 'std::tie' is defined in header '<tuple>'; did you forget to '#include <tuple>'?
+    3 | #include <vector>
+  +++ |+#include <tuple>
+    4 | 
+main.cpp:66:36: error: 'get' was not declared in this scope; did you mean 'getw'?
+   66 |     while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      |                                    ^~~
+      |                                    getw
+main.cpp:67:11: error: 'ignore' was not declared in this scope
+   67 |       tie(ignore, pwr, pos) = facts[++i];
+      |           ^~~~~~
+main.cpp:86:11: error: 'llabs' was not declared in this scope
+   86 |       if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:487:7:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:336:49: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+  336 |                       _M_impl._M_end_of_storage - _M_impl._M_start);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<class _Tp, class ... _Args> using __is_nothrow_constructible_impl = std::__bool_constant<__is_nothrow_constructible(_Tp)> [with _Tp = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}]':
+/usr/local/include/c++/11.4.0/type_traits:1022:12:   required from 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:56:25:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1017:25: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1017 |       = __bool_constant<__is_nothrow_constructible(_Tp, _Args...)>;
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:56:25:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1025:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+ 1025 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:1025:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/ext/alloc_traits.h:34,
+                 from /usr/local/include/c++/11.4.0/bits/stl_uninitialized.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:66,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h: In instantiation of 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:56:25:   required from here
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:64: error: 'value' is not a member of 'std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int&, long long int&>'
+  513 |         noexcept(std::is_nothrow_constructible<_Up, _Args...>::value)
+      |                                                                ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:72,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/vector.tcc: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int&, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]':
+main.cpp:56:25:   required from here
+/usr/local/include/c++/11.4.0/bits/vector.tcc:117:29: error: cannot increment a pointer to incomplete type 'std::tuple<int, int, int>'
+  117 |             ++this->_M_impl._M_finish;
+      |               ~~~~~~~~~~~~~~^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/type_traits: In substitution of 'template<class _Tp, class ... _Args> using __is_nothrow_constructible_impl = std::__bool_constant<__is_nothrow_constructible(_Tp)> [with _Tp = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}]':
+/usr/local/include/c++/11.4.0/type_traits:1022:12:   required from 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:58:34:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1017:25: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1017 |       = __bool_constant<__is_nothrow_constructible(_Tp, _Args...)>;
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:57:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:58:34:   required from here
+/usr/local/include/c++/11.4.0/type_traits:1025:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+ 1025 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:1025:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/ext/alloc_traits.h:34,
+                 from /usr/local/include/c++/11.4.0/bits/stl_uninitialized.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:66,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h: In instantiation of 'static void std::allocator_traits<std::allocator<_Tp1> >::construct(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, _Up*, _Args&& ...) [with _Up = std::tuple<int, int, int>; _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >]':
+/usr/local/include/c++/11.4.0/bits/vector.tcc:115:30:   required from 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]'
+main.cpp:58:34:   required from here
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:513:64: error: 'value' is not a member of 'std::is_nothrow_constructible<std::tuple<int, int, int>, long long int&, int, long long int&>'
+  513 |         noexcept(std::is_nothrow_constructible<_Up, _Args...>::value)
+      |                                                                ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:72,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/vector.tcc: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {long long int&, int, long long int&}; _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&]':
+main.cpp:58:34:   required from here
+/usr/local/include/c++/11.4.0/bits/vector.tcc:117:29: error: cannot increment a pointer to incomplete type 'std::tuple<int, int, int>'
+  117 |             ++this->_M_impl._M_finish;
+      |               ~~~~~~~~~~~~~~^~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::size() const [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::size_type = long unsigned int]':
+main.cpp:63:32:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:919:50: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+  919 |       { return size_type(this->_M_impl._M_finish - this->_M_impl._M_start); }
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/vector:67,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_vector.h: In instantiation of 'std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::vector<_Tp, _Alloc>::reference = std::tuple<int, int, int>&; std::vector<_Tp, _Alloc>::size_type = long unsigned int]':
+main.cpp:65:33:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:1046:41: error: invalid use of incomplete type 'class std::tuple<int, int, int>'
+ 1046 |         return *(this->_M_impl._M_start + __n);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'class std::tuple<int, int, int>'
+   45 |     class tuple;
+      |           ^~~~~
+In file included from /usr/local/include/c++/11.4.0/x86_64-linux-gnu/bits/c++allocator.h:33,
+                 from /usr/local/include/c++/11.4.0/bits/allocator.h:46,
+                 from /usr/local/include/c++/11.4.0/vector:64,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/ext/new_allocator.h: In instantiation of 'void __gnu_cxx::new_allocator<_Tp>::deallocate(_Tp*, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = std::tuple<int, int, int>; __gnu_cxx::new_allocator<_Tp>::size_type = long unsigned int]':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:496:23:   required from 'static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = std::tuple<int, int, int>; std::allocator_traits<std::allocator<_Tp1> >::allocator_type = std::allocator<std::tuple<int, int, int> >; std::allocator_traits<std::allocator<_Tp1> >::pointer = std::tuple<int, int, int>*; std::allocator_traits<std::allocator<_Tp1> >::size_type = long unsigned int]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:354:19:   required from 'void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >; std::_Vector_base<_Tp, _Alloc>::pointer = std::tuple<int, int, int>*; std::size_t = long unsigned int]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:335:2:   required from 'std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:487:7:   required from here
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:135:13: error: invalid application of '__alignof__' to incomplete type 'std::tuple<int, int, int>'
+  135 |         if (alignof(_Tp) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+      |             ^~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:139:37: error: invalid application of 'sizeof' to incomplete type 'std::tuple<int, int, int>'
+  139 |                               __t * sizeof(_Tp),
+      |                                     ^~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:141:48: error: invalid application of '__alignof__' to incomplete type 'std::tuple<int, int, int>'
+  141 |                               std::align_val_t(alignof(_Tp)));
+      |                                                ^~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/ext/new_allocator.h:147:35: error: invalid application of 'sizeof' to incomplete type 'std::tuple<int, int, int>'
+  147 |                           , __t * sizeof(_Tp)
+      |                                   ^~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/type_traits: In instantiation of 'struct std::is_destructible<std::tuple<int, int, int> >':
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = std::tuple<int, int, int>*]'
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:848:15:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = std::tuple<int, int, int>*; _Tp = std::tuple<int, int, int>]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:680:15:   required from 'std::vector<_Tp, _Alloc>::~vector() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+main.cpp:24:30:   required from here
+/usr/local/include/c++/11.4.0/type_traits:885:52: error: static assertion failed: template argument must be a complete class or an unbounded array
+  885 |       static_assert(std::__is_complete_or_unbounded(__type_identity<_Tp>{}),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/include/c++/11.4.0/type_traits:885:52: note: 'std::__is_complete_or_unbounded<std::__type_identity<std::tuple<int, int, int> > >((std::__type_identity<std::tuple<int, int, int> >{}, std::__type_identity<std::tuple<int, int, int> >()))' evaluates to false
+In file included from /usr/local/include/c++/11.4.0/vector:65,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/bits/stl_construct.h: In instantiation of 'void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = std::tuple<int, int, int>*]':
+/usr/local/include/c++/11.4.0/bits/alloc_traits.h:848:15:   required from 'void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = std::tuple<int, int, int>*; _Tp = std::tuple<int, int, int>]'
+/usr/local/include/c++/11.4.0/bits/stl_vector.h:680:15:   required from 'std::vector<_Tp, _Alloc>::~vector() [with _Tp = std::tuple<int, int, int>; _Alloc = std::allocator<std::tuple<int, int, int> >]'
+main.cpp:24:30:   required from here
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51: error: static assertion failed: value type is destructible
+  188 |       static_assert(is_destructible<_Value_type>::value,
+      |                                                   ^~~~~
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:188:51: note: 'std::integral_constant<bool, false>::value' evaluates to false
+/usr/local/include/c++/11.4.0/bits/stl_construct.h:195:25: error: invalid use of incomplete type 'std::iterator_traits<std::tuple<int, int, int>*>::value_type' {aka 'class std::tuple<int, int, int>'}
+  195 |       std::_Destroy_aux<__has_trivial_destructor(_Value_type)>::
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/local/include/c++/11.4.0/bits/move.h:57,
+                 from /usr/local/include/c++/11.4.0/bits/stl_pair.h:59,
+                 from /usr/local/include/c++/11.4.0/bits/stl_algobase.h:64,
+                 from /usr/local/include/c++/11.4.0/vector:60,
+                 from main.cpp:3:
+/usr/local/include/c++/11.4.0/type_traits:45:11: note: declaration of 'std::iterator_traits<std::tuple<int, int, int>*>::value_type' {aka 'class std::tuple<int, int, int>'}
+   45 |     class tuple;
+      |           ^~~~~
+
+```
+
+Evaluate the error message. Think of a solution to fix the program and return the entire source code with the fix.
+
+---
+
+Rewrite the entire solution applying necessary fixes.
+---------- assistant ----------
+
+```c++
+#include <cstdio>
+#include <vector>
+
+using namespace std;
+typedef long long ll;
+
+const ll MAX_N = 5001, MAX_M = 1e18 + 1;
+const ll MAX_B = 1e6 + 1;
+
+int n, m;
+vector<ll> a, p[MAX_B];
+
+// generate prime powers
+void gen_primes() {
+  for (ll i = 2; i < MAX_B; i++) {
+    if (p[i].size() == 0) {
+      for (ll j = i * i; j < MAX_B; j += i) { p[j].push_back(i); }
+    }
+  }
+}
+
+// store triplets (prime, power, index) for further processing
+vector<tuple<int, int, int>> facts;
+
+inline ll pwr(ll x, ll p) {
+  ll ans = 1;
+  for (; p > 0; p >>= 1) {
+    if (p & 1) ans *= x;
+    x *= x;
+  }
+  return ans;
+}
+
+struct Query {
+  ll val;
+  ll l, r; // boundaries for binary search
+  ll& ans;
+  inline bool operator<(const Query& other) const { return val < other.val; }
+};
+
+int main() {
+  freopen("abx.in", "r", stdin);
+  freopen("abx.out", "w", stdout);
+  ios_base::sync_with_stdio(0);
+  cin.tie(0);
+  cout.tie(0);
+  cin >> n >> m;
+  a.resize(n);
+  for (ll i = 0; i < n; i++) cin >> a[i];
+  gen_primes();
+  for (ll i = 0; i < n; i++) {
+    ll x = a[i];
+    for (ll& divisor : p[x]) {
+      int pow = 0;
+      while (x % divisor == 0) x /= divisor, pow++;
+      facts.emplace_back(divisor, pow, i);
+    }
+    if (x > 1) facts.emplace_back(x, 1, i);
+  }
+  sort(facts.begin(), facts.end());
+  int queries = 0;
+  vector<Query> q;
+  for (ll i = 0; i < facts.size(); i++) {
+    int pme, pwr, pos;
+    tie(pme, pwr, pos) = facts[i];
+    while (i + 1 < facts.size() && get<0>(facts[i + 1]) == pme) {
+      tie(ignore, pwr, pos) = facts[++i];
+    }
+    ll lo = (pme == 2 ? 3 : 2), hi = m / pwr + 1;
+    Query qr = {a[pos], lo / pwr * pwr + pwr, hi / pwr * pwr - pwr,
+                 a[pos]};
+    if (!q.empty() && q.back().val == qr.val) {
+      q.back().r = qr.r;
+    } else {
+      q.push_back(qr);
+      queries++;
+    }
+  }
+
+  vector<ll> ans(queries);
+  for (ll qi = 0; qi < queries; qi++) {
+    Query& qr = q[qi];
+    while (qr.l <= qr.r) {
+      ll mid = (qr.l + qr.r) >> 1;
+      ll cur = pwr(qr.val / mid, mid);
+      if (llabs(qr.ans - cur) > llabs(qr.ans - a[qr.ans])) {
+        qr.ans = mid;
+      }
+      if (cur < a[qr.ans]) {
+        qr.r = mid - 1;
+      } else {
+        qr.l = mid + 1;
+      }
+    }
+    ans[qi] = pwr(qr.val / qr.ans, qr.ans);
+  }
+
+  for (ll qr : ans) cout << qr << '\n';
+
+  return 0;
+}
+```
